@@ -1,12 +1,4 @@
-using Dare
-
-using DataFrames
-using Distributions
-using DifferentialEquations
-using DSP
-using CSV
-using PlotlyJS
-using Peaks
+using Complexity
 
 println("...........o0o----ooo0§0ooo~~~  START  ~~~ooo0§0ooo----o0o...........")
 

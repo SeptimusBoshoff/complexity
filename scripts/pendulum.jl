@@ -1,28 +1,9 @@
-using Dare
+using Complexity
 using Distributions
 using DifferentialEquations
 using CSV
 using DataFrames
 using PlotlyJS
-
-#= using DrWatson
-@quickactivate "dare"
-
-using CSV
-using DataFrames
-using DifferentialEquations
-using Distributions
-using LinearAlgebra
-using JuMP
-import Ipopt
-using NearestNeighbors
-using NonNegLeastSquares
-using PlotlyJS =#
-
-#= include(srcdir("Kernel_Machine.jl"))
-include(srcdir("Machine_Dynamics.jl"))
-include(srcdir("Dif_Map.jl"))
-include(srcdir("Dynamical_Systems.jl")) =#
 
 println("...........o0o----ooo0§0ooo~~~  START  ~~~ooo0§0ooo----o0o...........")
 

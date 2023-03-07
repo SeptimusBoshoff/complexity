@@ -1,5 +1,4 @@
-using Dare
-using LinearAlgebra
+using Complexity
 
 # number of samples
 m = 1000
