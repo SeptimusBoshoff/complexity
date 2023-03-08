@@ -183,3 +183,8 @@ Cyyᵖ = Φ*diagm(vec((Gˣ + ε*I)\(Gˣ*αx)))*transpose(Φ)
 #-------------------------------------------------------------------------------
 # Kernel Chain Rule
 
+Cxyᵖ = Array{Float64, 2}(undef, 2, 2) 
+Cyxᵖ = Array{Float64, 2}(undef, 2, 2)
+
+Cxyᵖ = Cx_yₕ*Cyyₕ
+Cyxᵖ = Cy_xₕ*Cxxₕ
