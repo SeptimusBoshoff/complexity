@@ -1,4 +1,4 @@
-using Complexity
+using .Complexity
 
 println("\n...........o0o----ooo0o0ooo~~~  START  ~~~ooo0o0ooo----o0o...........")
 
@@ -38,15 +38,15 @@ end
 @time begin
 
     println("\n1. Generating gram matrices")
-    Gx, Gy, index_map = series_Gxy([series], scale, npast, nfuture)
+    Gx, Gy, index_map = Complexity.series_Gxy([series], scale, npast, nfuture)
 
     # Compute the state similarity matrix.
     println("\n2. Computing Gs")
-    Gs = Embed_States(Gx, Gy)
+    Gs = Complexity.Embed_States(Gx, Gy)
 
     # Compute a spectral basis for representing the causal states.
     println("\n3. Projection")
-    eigenvalues, basis, coords = Spectral_Basis(Gs, num_basis = 2, scaled = false)
+    eigenvalues, basis, coords = Complexity.Spectral_Basis(Gs, num_basis = 2, scaled = false)
 
 end
 
