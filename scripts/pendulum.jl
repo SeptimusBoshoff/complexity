@@ -1,4 +1,4 @@
-using .Complexity
+using Complexity
 using Distributions
 using DifferentialEquations
 using CSV
@@ -46,7 +46,7 @@ tspan = (0.0, t_final)
 
 #Parameters
 p = [m, g, L, b]
-prob = ODEProblem(Complexity.Pendulum!, u0, tspan, p)
+prob = ODEProblem(Pendulum!, u0, tspan, p)
 
 sol = solve(prob, saveat = μ_s, wrap = Val(false))
 u = reduce(hcat, sol.u)
@@ -89,29 +89,29 @@ N = length(data[1])# number of samples
 @time begin
 
     println("\n1. Generating gram matrices")
-    Gx, Gy, index_map = Complexity.series_Gxy(data, scale, npast, nfuture)
+    Gx, Gy, index_map = series_Gxy(data, scale, npast, nfuture)
 
     # Compute the state similarity matrix. See the paper
     # Embedding to get the similarity matrix between conditional distributions
     println("\n2. Computing Gs")
-    Gs = Complexity.Embed_States(Gx, Gy)
+    Gs = Embed_States(Gx, Gy)
 
     # Compute a spectral basis for representing the causal states.
     # Find a reduced dimension embedding and extract the significant coordinates"
     println("\n3. Projection")
-    eigenvalues, basis, coords = Complexity.Spectral_Basis(Gs, num_basis = 20, scaled = true)
+    eigenvalues, basis, coords = Spectral_Basis(Gs, num_basis = 20, scaled = true)
 
     # This is the forward operator in state space. It is built from consecutive
     # indices in the index map. Data series formed by multiple contiguous time
     # blocks are supported, as well as the handling of NaN values
     println("\n4. Forward Shift Operator")
-    shift_op = Complexity.Shift_Operator(coords, eigenvalues, index_map = index_map)
+    shift_op = Shift_Operator(coords, eigenvalues, index_map = index_map)
 
     # This is the expectation operator, using its default function that predicts
     # the first entry in the future sequence from the current state distribution. 
     # You can specify other functions, see the documentation
     println("\n5. Expectation Operator")
-    expect_op = Complexity.Expectation_Operator(coords, index_map, data)
+    expect_op = Expectation_Operator(coords, index_map, data)
 
     # Start from the last known point (represented by its coordinates) and
     # evolve the state for nfuture+1 points.
@@ -119,7 +119,7 @@ N = length(data[1])# number of samples
     #= pred, dist = Predict(2*nfuture, coords[end - nfuture, :], shift_op, expect_op, return_dist = 2)
     final_dist = dist[:, end] =#
 
-    pred, dist = Complexity.Predict(2*nfuture, coords[end - nfuture, :], shift_op, expect_op, return_dist = 2)
+    pred, dist = Predict(2*nfuture, coords[end - nfuture, :], shift_op, expect_op, return_dist = 2)
     final_dist = dist[:, end]
 end
 

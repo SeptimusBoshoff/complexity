@@ -1,4 +1,5 @@
 using Complexity
+using LinearAlgebra
 
 # number of samples
 m = 1000
@@ -106,8 +107,8 @@ Cxyₕ = (1/m)*Υ*H*transpose(Φ) # (1/m)*(Υ - μx*transpose(ones(m)))*transpos
 Gˣ = transpose(Υ)*Υ
 Gʸ = transpose(Φ)*Φ
 
-Cy_x = Φ*inv(Gˣ + ε*I)*transpose(Υ) # Cyx*inv(Cxx)
-Cx_y = Υ*inv(Gʸ + ε*I)*transpose(Φ) # Cxy*inv(Cyy)
+Cy_x = Φ*((Gˣ + ε*I)\transpose(Υ)) # Cyx*inv(Cxx)
+Cx_y = Υ*((Gʸ + ε*I)\transpose(Φ)) # Cxy*inv(Cyy)
 
 Cy_xₕ = Cyxₕ*inv(Cxxₕ + ε*I) # Φ*inv(H*Gˣ + m*ε*I)*H*transpose(Υ)
 Cx_yₕ = Cxyₕ*inv(Cyyₕ + ε*I) # Υ*inv(H*Gʸ + m*ε*I)*H*transpose(Φ)
@@ -115,11 +116,11 @@ Cx_yₕ = Cxyₕ*inv(Cyyₕ + ε*I) # Υ*inv(H*Gʸ + m*ε*I)*H*transpose(Φ)
 kx = transpose(Υ)*ϕ
 ky = transpose(Φ)*ϕ
 
-ωx = inv(Gˣ + ε*I)*kx
-ωy = inv(Gʸ + ε*I)*ky
+ωx = (Gˣ + ε*I)\kx
+ωy = (Gʸ + ε*I)\ky
 
-ωxₕ = inv(H*Gˣ + m*ε*I)*H*kx
-ωyₕ = inv(H*Gʸ + m*ε*I)*H*ky
+ωxₕ = (H*Gˣ + m*ε*I)\(H*kx)
+ωyₕ = (H*Gʸ + m*ε*I)\(H*ky)
 
 μy_x = Φ*ωx
 μx_y = Υ*ωy
@@ -152,10 +153,33 @@ display(Cx_y)
 println("\nμy_x = ")
 display(μy_x)
 
+#-------------------------------------------------------------------------------
+# Hilbert-Schmidt Independence Criterion
+
 hsic = norm(Cyx - μy*transpose(μx))
 hsicₕ = norm(Cyxₕ)
 
 println("\nhsic = ",hsic)
 println("hsicₕ = ",hsicₕ)
 
+#-------------------------------------------------------------------------------
+# Kernel Sum Rule
+
+μxᵖ  = Array{Float64, 1}(undef, 2) 
+μyᵖ = Array{Float64, 1}(undef, 2)
+
+Cxxᵖ  = Array{Float64, 2}(undef, 2, 2) 
+Cyyᵖ = Array{Float64, 2}(undef, 2, 2)
+
+αy = Φ\μy
+αx = Υ\μx
+
+μxᵖ = Υ*((Gʸ + ε*I)\(Gʸ*αy)) # Cx_y*μy
+μyᵖ = Φ*((Gˣ + ε*I)\(Gˣ*αx)) # Cy_x*μx
+
+Cxxᵖ  = Υ*diagm(vec((Gʸ + ε*I)\(Gʸ*αy)))*transpose(Υ)
+Cyyᵖ = Φ*diagm(vec((Gˣ + ε*I)\(Gˣ*αx)))*transpose(Φ)
+
+#-------------------------------------------------------------------------------
+# Kernel Chain Rule
 

@@ -1,6 +1,9 @@
-using .Complexity
+using Complexity
+using CSV
+using DataFrames
 using DSP
 using Peaks
+using PlotlyJS
 
 println("...........o0o----ooo0§0ooo~~~  START  ~~~ooo0§0ooo----o0o...........")
 
@@ -65,21 +68,21 @@ scale = sum(true_pk_vals)/length(true_pk_vals) - sum(true_valy_vals)/length(true
 
     #= 1. Generating gram matrices =#
     println("\n1. Generating gram matrices")
-    Gx, Gy, index_map = Complexity.series_Gxy([data], scale, npast, nfuture)
+    Gx, Gy, index_map = series_Gxy([data], scale, npast, nfuture)
 
     #=2. Computing Gs
         Compute the state similarity matrix.
         Embedding to get the similarity matrix between conditional distributions 
     =#
     println("\n2. Computing Gs")
-    Gs = Complexity.Embed_States(Gx, Gy)
+    Gs = Embed_States(Gx, Gy)
 
     #= 3. Projection1
         Compute a spectral basis for representing the causal states.
         Find a reduced dimension embedding and extract the significant coordinates
     =#
     println("\n3. Projection")
-    eigenvalues, basis, coords = Complexity.Spectral_Basis(Gs, num_basis = 30, scaled = true)
+    eigenvalues, basis, coords = Spectral_Basis(Gs, num_basis = 30, scaled = true)
 
     #= 4. Forward Shift Operator
         This is the forward operator in state space. It is built from consecutive
@@ -87,7 +90,7 @@ scale = sum(true_pk_vals)/length(true_pk_vals) - sum(true_valy_vals)/length(true
         blocks are supported, as well as the handling of NaN values 
     =#
     println("\n4. Forward Shift Operator")
-    shift_op = Complexity.Shift_Operator(coords, eigenvalues, index_map = index_map)
+    shift_op = Shift_Operator(coords, eigenvalues, index_map = index_map)
 
     #= 5. Expectation Operator
         This is the expectation operator, using its default function that predicts
@@ -95,14 +98,14 @@ scale = sum(true_pk_vals)/length(true_pk_vals) - sum(true_valy_vals)/length(true
         You can specify other functions, see the documentation 
     =#
     println("\n5. Expectation Operator")
-    expect_op = Complexity.Expectation_Operator(coords, index_map, [data])
+    expect_op = Expectation_Operator(coords, index_map, [data])
 
     #= 6. Prediction
         Start from the last known point (represented by its coordinates) and
         evolve the state for nfuture+1 points. 
     =#
     println("\n6. Prediction")
-    pred, dist = Complexity.Predict(2*N - window_size + nfuture, coords[1, :], shift_op, expect_op, return_dist = 2, knn_convexity = 5, knndim = 5, coords = coords, extent = 0.05)
+    pred, dist = Predict(2*N - window_size + nfuture, coords[1, :], shift_op, expect_op, return_dist = 2, knn_convexity = 5, knndim = 5, coords = coords, extent = 0.05)
 end
 
 #-------------------------------------------------------------------------------

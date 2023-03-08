@@ -1,23 +1,13 @@
 module Complexity
 
 using ArnoldiMethod
-using CSV
-using DataFrames
-using DifferentialEquations
-using Distributions
-using DSP
+import Ipopt
+using JuMP
 using LinearAlgebra
 using LinearMaps
 using Logging
-using JuMP
 using NearestNeighbors
 using NonNegLeastSquares
-using PlotlyJS
-import Ipopt
-using Peaks
-using PlotlyJS
-using Random
-using SpecialFunctions
 using Test
 
 include("./Kernel_Machine.jl")
