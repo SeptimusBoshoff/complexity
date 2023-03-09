@@ -183,8 +183,28 @@ Cyyᵖ = Φ*diagm(vec((Gˣ + ε*I)\(Gˣ*αx)))*transpose(Φ)
 #-------------------------------------------------------------------------------
 # Kernel Chain Rule
 
-Cxyᵖ = Array{Float64, 2}(undef, 2, 2) 
-Cyxᵖ = Array{Float64, 2}(undef, 2, 2)
+Λʸ = (Gʸ + ε*I)\(Gʸ*diagm(vec(αy)))
+Λˣ = (Gˣ + ε*I)\(Gˣ*diagm(vec(αx)))
 
-Cxyᵖ = Cx_yₕ*Cyyₕ
-Cyxᵖ = Cy_xₕ*Cxxₕ
+Dʸ = diagm(vec((Gʸ + ε*I)\(Gʸ*αy)))
+Dˣ = diagm(vec((Gˣ + ε*I)\(Gˣ*αx)))
+
+Cxyᵖ = Υ*Λʸ*transpose(Φ) # Cx_y*Cyy # Υ*Dʸ*transpose(Φ)
+Cyxᵖ = Φ*Λˣ*transpose(Υ) # Cy_x*Cxx # Φ*Dˣ*transpose(Υ) # Φ*transpose(Λʸ)*transpose(Υ)
+
+Cxxᵖ = Υ*Λˣ*transpose(Υ) # Υ*Dˣ*transpose(Υ) 
+Cyyᵖ = Φ*Λʸ*transpose(Φ)
+
+#-------------------------------------------------------------------------------
+# Kernel Bayes' Rule
+
+# Cyy = Φ*(αy.*transpose(Φ)) # Φ*diagm(vec(αy))*transpose(Φ)
+
+εᵖ = 10e-6
+
+Cyxᵖ = Φ*transpose(Λʸ)*transpose(Υ) # Φ*Dʸ*transpose(Υ)
+Cxxᵖ = Υ*Dʸ*transpose(Υ)
+
+β_x = transpose(Λʸ)*(((Dʸ*Gˣ)^2 + εᵖ*I)\(Gˣ*Dʸ*kx))
+
+μy_xᵖ = Φ*β_x # Φ*Dʸ*Gˣ*(((Dʸ*Gˣ)^2 + εᵖ*I)\(Dʸ*kx)) # Cyxᵖ*((Cxxᵖ + εᵖ*I)\(ϕ))
