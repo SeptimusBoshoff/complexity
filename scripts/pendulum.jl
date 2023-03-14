@@ -13,7 +13,7 @@ println("...........o0o----ooo0§0ooo~~~  START  ~~~ooo0§0ooo----o0o...........
 μ_s = 0.005 # time step size (seconds)
 t_final = 30 # max simulation time (seconds)
 
-# Other input constants 
+# Other input constants
 m = 1 # mass (kg)
 g = 9.81 # gravity (m/s^2)
 L = 1 # length (m)
@@ -83,43 +83,46 @@ data = [df.x[1:end], df.y[1:end]] =#
 #*******
 
 N = length(data[1])# number of samples
+
+scale = [maximum(data[1])-minimum(data[1]); maximum(data[2])-minimum(data[2])]
+
 #-------------------------------------------------------------------------------
 # Emergence - Pattern Discovery
 
 @time begin
 
     println("\n1. Generating gram matrices")
-    Gx, Gy, index_map = series_Gxy(data, scale, npast, nfuture)
+    Gx, Gy, index_map = series_Gxy(data, scale, npast, nfuture, kernel_type = "Gaussian")
 
     # Compute the state similarity matrix. See the paper
     # Embedding to get the similarity matrix between conditional distributions
     println("\n2. Computing Gs")
-    Gs = Embed_States(Gx, Gy)
+    Gs = embed_states(Gx, Gy)
 
     # Compute a spectral basis for representing the causal states.
     # Find a reduced dimension embedding and extract the significant coordinates"
     println("\n3. Projection")
-    eigenvalues, basis, coords = Spectral_Basis(Gs, num_basis = 20, scaled = true)
+    eigenvalues, basis, coords = spectral_basis(Gs, num_basis = 20)
 
     # This is the forward operator in state space. It is built from consecutive
     # indices in the index map. Data series formed by multiple contiguous time
     # blocks are supported, as well as the handling of NaN values
     println("\n4. Forward Shift Operator")
-    shift_op = Shift_Operator(coords, eigenvalues, index_map = index_map)
+    shift_op = shift_operator(coords, eigenvalues, index_map = index_map)
 
     # This is the expectation operator, using its default function that predicts
-    # the first entry in the future sequence from the current state distribution. 
+    # the first entry in the future sequence from the current state distribution.
     # You can specify other functions, see the documentation
     println("\n5. Expectation Operator")
-    expect_op = Expectation_Operator(coords, index_map, data)
+    expect_op = expectation_operator(coords, index_map, data)
 
     # Start from the last known point (represented by its coordinates) and
     # evolve the state for nfuture+1 points.
     println("\n6. Prediction")
-    #= pred, dist = Predict(2*nfuture, coords[end - nfuture, :], shift_op, expect_op, return_dist = 2)
+    #= pred, dist = predict(2*nfuture, coords[end - nfuture, :], shift_op, expect_op, return_dist = 2)
     final_dist = dist[:, end] =#
 
-    pred, dist = Predict(2*nfuture, coords[end - nfuture, :], shift_op, expect_op, return_dist = 2)
+    pred, dist = predict(2*nfuture, coords[end - nfuture, :], shift_op, expect_op, return_dist = 2)
     final_dist = dist[:, end]
 end
 
@@ -131,14 +134,14 @@ df_θ_ω = DataFrame(θ = u[1,:], ω = u[2,:])
 plot_θ_ω = plot(df_θ_ω, x = :θ, y = :ω,
                 Layout(
                     title = attr(
-                        text = "Damped Pendulum: Exact State Space",  
+                        text = "Damped Pendulum: Exact State Space",
                     ),
                     title_x = 0.5,
                     xaxis_title = "θ [rad]",
                     yaxis_title = "ω [rad/s]",)
                 )
 
-#display(plot_θ_ω)    
+#display(plot_θ_ω)
 
 # (x, y) positions from machine perspective
 nans = Array{Float64, 1}(undef, N - 2*nfuture)
@@ -148,11 +151,11 @@ x̂ = vec([nans; pred[1]])
 ŷ = vec([nans; pred[2]])
 
 df_x_y_t = DataFrame(x = x, y = y, x̂ = x̂, ŷ = ŷ, t = tₘ)
-plot_x_y = plot(df_x_y_t, 
+plot_x_y = plot(df_x_y_t,
                 x = :x, y = :y,
                 Layout(
                     title = attr(
-                        text = "Damped Pendulum: Cartesian Coordinates",  
+                        text = "Damped Pendulum: Cartesian Coordinates",
                     ),
                     title_x = 0.5,
                     xaxis_title = "x [m]",
@@ -173,12 +176,12 @@ trace_x̂ = scatter(df_x_y_t, x = :t, y = :x̂, name = "x'")
 plot_x_t = plot([trace_x, trace_y, trace_x̂, trace_ŷ],
                 Layout(
                     title = attr(
-                        text = "Damped Pendulum: Evolution in Time",     
+                        text = "Damped Pendulum: Evolution in Time",
                         ),
                     title_x = 0.5,
                     xaxis_title = "t [s]",
                     yaxis_title = "y,x [m]",
-                    ),  
+                    ),
                 )
 display(plot_x_t)
 
@@ -198,7 +201,7 @@ trace_Φ = scatter(df_Ψ_Φ, x = :Φ₁, y = :Φ₂, name = "Φ")
 plot_Ψ_Φ = plot([trace_Ψ, trace_Φ],
                 Layout(
                     title = attr(
-                        text = "Damped Pendulum: Reconstructed State Space",  
+                        text = "Damped Pendulum: Reconstructed State Space",
                     ),
                     title_x = 0.5,
                     xaxis_title = "Ψ₁",
@@ -213,13 +216,13 @@ trace_Φ = scatter3d(df_Ψ_Φ, x = :Φ₁, y = :Φ₂, z = :Φ₃, name = "Φ", 
 plot_Ψ_Φ_3d = plot([trace_Ψ, trace_Φ],
                 Layout(
                     title = attr(
-                        text = "Damped Pendulum: Reconstructed State Space",  
+                        text = "Damped Pendulum: Reconstructed State Space",
                     ),
                     title_x = 0.5,
                     scene = attr(
                         xaxis_title = "Ψ₁",
                         yaxis_title = "Ψ₂",
-                        zaxis_title = "Ψ₃",  
+                        zaxis_title = "Ψ₃",
                     ),
                     ),
                 )

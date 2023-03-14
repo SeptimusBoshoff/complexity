@@ -1,97 +1,120 @@
 #_______________________________________________________________________________
 # Kernel Machines
+"""
+    series_Gxy(series, scale, npast, nfuture; kernel_type = "Gaussian", decay = 1,
+    qcflags = nothing, localdiff = 0, take2skipX = 0)
 
-using LinearAlgebra
+# Description:
+Compute the past and the future Gram matrices, using the kernel set by set_kernel (defaults
+to Gaussian)
 
-function series_Gxy(series, scale, npast, nfuture; decay = 1, qcflags = nothing, localdiff = 0, take2skipX = 0)
+# Arguments:
+- `series::Vector{Vector{Float64}} or Vector{Float64}`: Each vector is a time-contiguous
+  block of data, measured by a sensor, with as many elements as time samples. NaN values are
+  allowed and detected.
+- `scale::Vector{Float64}` or Float64: If a single float is provided it applies to all
+  series. A vector of floats specifies a different scale for each data source.
+- `npast::Vector{Int} or Int`: take that consecutive number of samples for building an
+  observed past. If a single integer is provided it applies to all series. Different values
+  can be provided for different data sources (=each series). It is assumed that data samples
+  are measured at matching times for each data source, hence the first causal state can only
+  be computed after the-largest-npast values have been observed.
+- `nfuture::Vector{Int} or Int`: take that consecutive number of samples, just after the
+  past samples, for building an observed future. If a single integer is provided it applies
+  to all series. Similarly as for npast, the largest nfuture value sets the time of the last
+  computable causal state.
+- `decay::Vector{Int} or Int`: ratio for the furthermost weight compared to the immediate
+  past/future. Defaults to 1 = no decay. If a single float is provided it applies to all
+  series
 
-    #=
-        Compute the past and the future Gram matrices, using the kernel set by set_kernel (defaults to Gaussian)
-        
-        Arguments:
-        series: array or list. Each array is a time-contiguous block of data, 
-        with as many rows as time samples and each column is a feature. NaN values are allowed and detected. 
-        A list may be provided, in which case each list entry is a different data source. 
-        Heterogenous data are supported, so each list entry can be of completely different type. 
-        However, each list entry must have the same number of values.
-        Each first-level list entry can itself be a second-level list instead of a unique array. 
-        In that case, these second-level lists gather data acquired in different time-continuous blocks. 
-        These blocks must be consistent across heterogenous data sources: at each time, 
-        each data source must be acquired, even though some sensors may fail (NaN values).
-        So, in order to enter a unique data source, but with multiple time blocks, 
-        the syntax is to use a double list : [[data1, data2, ...]] . 
-        
-        There, the first-level list specifies a unique data source, and the second level list specifies the contiguous data blocks.
-        Multiple sources and multiple blocks read: [[src1_block1, src1_block2], [src2_block1, src2_block2]. 
-        Same-numbered blocks from different sources must be of the same length, but different blocks may have different lengths.
+# Keyword Arguments:
+- `qcflags::Int`: (optional) quality control flags. <= 0 means invalid data. If present
+  there must be one qcflag per sample
+- `localdiff::Int`: how to compute the differences between the sequences, pasts and futures.
+  The default is 0 = just take the difference. This assumes that what matters are the series
+  absolute values. localdiff = 1 removes the average (weigthed using decay) of each sequence
+  before taking their differences. This may be useful for eliminating a slow drift due to
+  the sensor itself, which should be removed from data. localdiff = 2 means that the
+  "present" value is used as reference. This assumes that what matters are relative
+  variations around the "present" value. Warning: this gives equal importance to all such
+  variations. For example, a fluctuation of -3°C in summer (from ~25°C) is not the same as a
+  fluctuation of -3°C in winter (which may very well cross the freezing point).
+- `take2skipX::Int`: (optional) (default 0) performs a special kind of subsampling: two
+  consecutive samples are retained, X samples are discarded, then this (X+2) sequence
+  repeats. This scheme is designed to preserve consecutive entries for building a shift
+  operator while still allowing subsampling of very large series. The classic subsampling
+  scheme (take one out of X) can also be applied a priori to the original series, but it is
+  equivalent to a (bad) low-pass filtering. Then, the shift operator would be computed on
+  consecutive entries of the subsampled series, hence at a different time scale. The
+  take2skipX allows to still work on the original time scale. Both can be combined (after
+  appropriate low-pass filtering).
 
-        scale: float, or list of floats. If a single float is provided it applies to all series. 
-        A list of floats specifies a different scale for each data source.
-         
-        npast: take that consecutive number of samples for building an observed past. 
-        If a single integer is provided it applies to all series. Different values can be provided 
-        for different data sources (=each series). 
-        It is assumed that data samples are measured at matching times for each data source, 
-            hence the first causal state can only be computed after the-largest-npast values have been observed.
-        
-        nfuture: take that consecutive number of samples, just after the past samples, 
-        for building an observed future. If a single integer is provided it applies to all series. 
-        Similarly as for npast, the largest nfuture value sets the time of the last computable causal state.
-        
-        decay: ratio for the furthermost weight compared to the immediate past/future. 
-        Defaults to 1 = no decay. If a single float is provided it applies to all series
-        
-        qcflags : quality control flags. <= 0 means invalid data. optional, but if present there must be one qcflag per sample
-        
-        localdiff: how to compute the differences between the sequences, pasts and futures. 
-        The default is 0 = just take the difference. This assumes that what matters are the 
-        series absolute values. localdiff = 1 removes the average (weigthed using decay) of 
-        each sequence before taking their differences. This may be useful for eliminating a 
-        slow drift due to the sensor itself, which should be removed from data. localdiff = 2 
-        means that the "present" value is used as reference. This assumes that what matters 
-        are relative variations around the "present" value. Warning: this gives equal importance 
-        to all such variations. For example, a fluctuation of -3°C in summer (from ~25°C) is not 
-        the same as a fluctuation of -3°C in winter (which may very well cross the freezing point).
-        
-        take2skipX : int, optional (default 0)
-        performs a special kind of subsampling: two consecutive samples are retained, X samples are discarded, 
-        then this (X+2) sequence repeats. This scheme is designed to preserve consecutive entries for building a shift operator while still allowing subsampling of very large series. The classic subsampling scheme (take one out of X) can also be applied a priori to the original series, but it is equivalent to a (bad) low-pass filtering. Then, the shift operator would be computed on consecutive entries of the subsampled series, hence at a different time scale. The take2skipX allows to still work on the original time scale. Both can be combined (after appropriate low-pass filtering).
-        
-    Returns:
-        dpast, dfuture: two square matrices of size N, between each observed sequences of a past/future sample pairs.
-        If lists are passed as arguments, each list entry is considered its own
-        series object, with a matching scale. The data are then combined into
-        a unique Gram matrix
+# Return Values
+- `Gx::Array{Float64, 2}`: A square Gram matrix of past events
+- `Gy::Array{Float64, 2}`: A square Gram matrix of future events
+- `idxmap::Array{Int, 1}`: Returns the indices of the valid (not NaN) and contiguous
+  (past,future) pairs. For each returned row/col index of the Gx, Gy matrices, the idxmap
+  specifies what data in the original series that (past,future) reference pair refers to.
 
-        idxmap : N array of int
-            Returns the indices of the valid (not NaN) and contiguous (past,future) pairs. For each returned row/col index of the dpast, dfuture matrices, the idxmap specifies what data in the original series that (past,future) reference pair refers to.
-    
-    =#
+"""
+function series_Gxy(series, scale, npast, nfuture; decay=1, qcflags=nothing, localdiff=0, take2skipX=0, kernel_type="Gaussian")
 
-    kernel_params_ = [-0.5, 2]
+    kernel_params_ = set_kernel(kernel_type = kernel_type)
 
-    series_list = series
+    if size(series[1], 1) == 1
+        series_list = [series]
+    else
+        series_list = series
+    end
 
-    nseries = size(series_list, 1) # the number of sources
+    nseries = size(series_list, 1) # the number of sources / sensors
 
-    if length(scale) != 1 scales_list = scale else scales_list = scale*ones(nseries) end
+    if length(scale) != 1
+        scales_list = scale
+    else
+        scales_list = scale * ones(nseries)
+    end
 
-    if length(npast) != 1 npasts_list = npast else npasts_list = Int.(npast*ones(nseries)) end
+    if length(npast) != 1
+        npasts_list = npast
+    else
+        npasts_list = Int.(npast * ones(nseries))
+    end
 
-    if length(nfuture) != 1 nfutures_list = nfuture else nfutures_list = Int.(nfuture*ones(nseries)) end
+    if length(nfuture) != 1
+        nfutures_list = nfuture
+    else
+        nfutures_list = Int.(nfuture * ones(nseries))
+    end
 
-    if length(decay) != 1 decays_list = decay else decays_list = decay*ones(nseries) end
+    if length(decay) != 1
+        decays_list = decay
+    else
+        decays_list = decay * ones(nseries)
+    end
 
-    if length(localdiff) != 1 localdiff_list = localdiff else localdiff_list = localdiff*ones(nseries) end
+    if length(localdiff) != 1
+        localdiff_list = localdiff
+    else
+        localdiff_list = localdiff * ones(nseries)
+    end
 
-    if length(localdiff) != 1 localdiff_list = localdiff else localdiff_list = localdiff*ones(nseries) end
+    if length(localdiff) != 1
+        localdiff_list = localdiff
+    else
+        localdiff_list = localdiff * ones(nseries)
+    end
 
     if qcflags === nothing
 
-        qcflags_list = [ nothing for ser in series_list ]
+        qcflags_list = [nothing for ser in series_list]
     else
 
-        if isa(qcflags, Dict) || isa(qcflags, Tuple) qcflags_list = qcflags else qcflags_list = [ qcflags ] end
+        if isa(qcflags, Dict) || isa(qcflags, Tuple)
+            qcflags_list = qcflags
+        else
+            qcflags_list = [qcflags]
+        end
     end
 
     total_lx, total_ly = nothing, nothing
@@ -99,8 +122,6 @@ function series_Gxy(series, scale, npast, nfuture; decay = 1, qcflags = nothing,
     index_map = compute_index_map_multiple_sources(series_list, npasts_list, nfutures_list, qcflags_list, take2skipX = take2skipX)
 
     for (ser, sca, npa, nfu, dec, ldiff) in zip(series_list, scales_list, npasts_list, nfutures_list, decays_list, localdiff_list)
-        
-        #ser = reshape(ser, :, 1) # turning the vector into a matrix
 
         lx, ly = series_xy_logk_indx(ser, sca, npa, nfu, dec, index_map, kernel_params_[1], kernel_params_[2], ldiff)
 
@@ -108,109 +129,110 @@ function series_Gxy(series, scale, npast, nfuture; decay = 1, qcflags = nothing,
 
             total_lx, total_ly = lx, ly
         else
-            # This modifies the arguments - only adds the lower-triangular part
-            total_lx = parallel_add_lowtri(total_lx, lx)
-            total_ly = parallel_add_lowtri(total_ly, ly)
+
+            parallel_add_lowtri!(total_lx, lx)
+            parallel_add_lowtri!(total_ly, ly)
         end
     end
-   
-    # This modifies the arguments - restores the upper part
-    parallel_exp_lowtri(total_lx, nseries)
-    parallel_exp_lowtri(total_ly, nseries)
+
+    parallel_exp_lowtri!(total_lx, nseries)
+    parallel_exp_lowtri!(total_ly, nseries)
 
     return total_lx, total_ly, index_map
 end
 
-function compute_index_map_multiple_sources(series_list, npasts_list, nfutures_list, qcflags_list; take2skipX = 0)
-    #=
-        Index mapping helper - for internal use
-        
-        See parameters of compute_index_map_single_source
-        
-        This version takes lists of multiple sources as argument.
-    =#
+"""
+- Index mapping helper - for internal use
+- See parameters of compute_index_map_single_source
+- This version takes lists of multiple sources as argument.
+"""
+function compute_index_map_multiple_sources(series_list, npasts_list, nfutures_list, qcflags_list; take2skipX=0)
 
-    # Each source may have its own NaN patterns and the computed 
-    # index maps do not match. => Compute these index maps for all 
-    # heterogenous sources and then retain only these indices that
-    # are common to all sources.
-    # Then, pass that global index map to the _logk function
-    
+    #= Each source may have its own NaN patterns and the computed
+    index maps do not match. => Compute these index maps for all
+    heterogenous sources and then retain only these indices that
+    are common to all sources.
+    Then, pass that global index map to the _logk function =#
+
     max_npast = maximum(npasts_list)
     max_nfuture = maximum(nfutures_list)
-    
+
     valid_map = nothing
 
     for (ser, npa, nfu, qc) in zip(series_list, npasts_list, nfutures_list, qcflags_list)
 
         skip_start = max_npast - npa
         skip_end = max_nfuture - nfu
-        
-        sidxmap = compute_index_map_single_source(ser, npa, nfu, skip_start = skip_start, skip_end = skip_end, qcflags = qc, take2skipX = take2skipX)
-        
+
+        sidxmap = compute_index_map_single_source(ser, npa, nfu, skip_start=skip_start, skip_end=skip_end, qcflags=qc, take2skipX=take2skipX)
+
         # combine global indices
         # retain only indices that are valid for all sources
         # A NaN in one source prevents the kernel combination
         # TODO: another possibility is to ignore the source, but how?
         # replace by mean? divide by nsource-1 ?
 
-        if valid_map === nothing valid_map = sidxmap else valid_map = intersect(valid_map, sidxmap) end
+        if valid_map === nothing
+            valid_map = sidxmap
+        else
+            valid_map = intersect(valid_map, sidxmap)
+        end
     end
 
     return valid_map
 end
 
+"""
+Index mapping helper - for internal use
+
+Parameters
+----------
+series : list of arrays list of contiguous data blocks
+
+npast : int take that consecutive number of samples for building an observed past.
+    This must be an integer, at least 1 value is needed (the present is part of the
+        past)
+
+nfuture : int take that consecutive number of samples, just after the past samples,
+    for building an observed future. nfuture can be 0, in which case, the function
+    only looks for valid pasts. combined with npast==1, the function only looks for
+    valid non-NaN values across all data sources
+
+skip_start : int, optional (default 1) number of data to mark as invalid at the
+    beginning of each contiguous data block. Useful to align heterogenous data with
+    different npast/nfuture.
+
+skip_end : int, optional (default 1) number of data to mark as invalid at the end of
+    each contiguous data block. Useful to align heterogenous data with different
+    npast/nfuture.
+
+qcflags : list of arrays, optional quality control flags. <= 0 means invalid data.
+    optional, but if present there must be one qcflag per sample
+
+take2skipX : int, optional (default 0) performs a special kind of subsampling: two
+    consecutive samples are retained, X samples are discarded, then this (X+2)
+    sequence repeats. This scheme is designed to preserve consecutive entries for
+    building a shift operator while still allowing subsampling of very large series.
+    The classic subsampling scheme (take one out of X) can also be applied a priori
+    to the original series, but it is equivalent to a (bad) low-pass filtering.
+    Then, the shift operator would be computed on consecutive entries of the
+    subsampled series, hence at a different time scale. The take2skipX allows to
+    still work on the original time scale. Both can be combined (after appropriate
+    low-pass filtering).
+
+Returns
+-------
+concat_idx_map: (N,) array of int Returns the indices of the valid entries, but
+    stacking all series passed as argument in a single series. The indices refer to
+    valid entries in that global stacked array. Hence, discontiguous data blocks
+    generate invalid entries in the global stacked array.
+"""
 function compute_index_map_single_source(series, npast, nfuture; skip_start = 0, skip_end = 0, qcflags = nothing, take2skipX = 0)
 
-    #=
-        Index mapping helper - for internal use
-
-        Parameters
-        ----------
-        series : list of arrays
-            list of contiguous data blocks
-            
-        npast : int
-            take that consecutive number of samples for building an observed past. This must be an integer, 
-                at least 1 value is needed (the present is part of the past)
-            
-        nfuture : int
-            take that consecutive number of samples, just after the past samples, for building an observed future. 
-            nfuture can be 0, in which case, the function only looks for valid pasts. combined with npast==1, the function 
-            only looks for valid non-NaN values across all data sources
-            
-        skip_start : int, optional (default 1)
-            number of data to mark as invalid at the beginning of each contiguous data block. 
-            Useful to align heterogenous data with different npast/nfuture.
-            
-        skip_end : int, optional (default 1)
-            number of data to mark as invalid at the end of each contiguous data block. 
-            Useful to align heterogenous data with different npast/nfuture.
-            
-        qcflags : list of arrays, optional
-            quality control flags. <= 0 means invalid data. optional, but if present there must be one qcflag per sample
-            
-        take2skipX : int, optional (default 0)
-            performs a special kind of subsampling: two consecutive samples are retained, X samples are discarded, 
-            then this (X+2) sequence repeats. This scheme is designed to preserve consecutive entries for building 
-            a shift operator while still allowing subsampling of very large series. The classic subsampling scheme 
-            (take one out of X) can also be applied a priori to the original series, but it is equivalent to a (bad) 
-            low-pass filtering. Then, the shift operator would be computed on consecutive entries of the subsampled 
-            series, hence at a different time scale. The take2skipX allows to still work on the original time scale. 
-            Both can be combined (after appropriate low-pass filtering).
-
-        Returns
-        -------
-        concat_idx_map: (N,) array of int
-            Returns the indices of the valid entries, but stacking all series passed as argument in a single series. 
-            The indices refer to valid entries in that global stacked array. Hence, discontiguous data blocks generate 
-            invalid entries in the global stacked array.
-    =#
-    
     if npast < 1
 
         println("npast must be a strictly positive integer")
-    end    
+    end
 
     # nfuture can be 0
     if nfuture < 0
@@ -219,29 +241,29 @@ function compute_index_map_single_source(series, npast, nfuture; skip_start = 0,
     end
 
     if !isa(series, Dict) && !isa(series, Tuple)
-        
+
         #println("series must be a list of arrays")
         series = [series]
     end
 
     if qcflags === nothing
 
-        qcflags_list = [ nothing for ser in series ]
+        qcflags_list = [nothing for ser in series]
 
-    else 
+    else
 
-        if isa(qcflags, Dict) || isa(qcflags, Tuple) 
+        if isa(qcflags, Dict) || isa(qcflags, Tuple)
 
-            qcflags_list = qcflags 
-        
+            qcflags_list = qcflags
+
         else
 
-            qcflags_list = [ qcflags ]  
+            qcflags_list = [qcflags]
         end
     end
-        
+
     concat_idx_map = nothing
-    
+
     nbefore = 0
 
     for (sidx, s) in enumerate(series)
@@ -256,13 +278,13 @@ function compute_index_map_single_source(series, npast, nfuture; skip_start = 0,
 
         if n < npast + nfuture
 
-            valid_pf = Array{Float64, 2}(undef, 1, n)
+            valid_pf = Array{Float64,2}(undef, 1, n)
             valid_pf = fill!(valid_pf, false)
 
         else
 
             # valid instantaneous time points
-            valid_t = .!isnan.(s[:,sidx])
+            valid_t = .!isnan.(s[:, sidx])
 
             if qcflags !== nothing && qcflags_list[sidx] <= nothing
 
@@ -284,7 +306,7 @@ function compute_index_map_single_source(series, npast, nfuture; skip_start = 0,
 
                 valid_pf[i+1:n] = valid_pf[i+1:n] .& valid_t[1:n-i]
             end
-                
+
             valid_pf[1:npast-1] .= false
             valid_pf[n-nfuture+1:end] .= false
 
@@ -295,9 +317,9 @@ function compute_index_map_single_source(series, npast, nfuture; skip_start = 0,
                 while i < n
 
                     i += 2
-                    if i>=n
+                    if i >= n
 
-                        break;
+                        break
                     end
 
                     for k in range(take2skipX)
@@ -306,39 +328,47 @@ function compute_index_map_single_source(series, npast, nfuture; skip_start = 0,
                         i += 1
 
                         if i >= n
-                            break;
+                            break
                         end
                     end
                 end
             end
 
         end
-        
+
         valid_idx = (1:n)[valid_pf]
-            
+
         if concat_idx_map === nothing
 
             concat_idx_map = valid_idx .+ nbefore
         else
 
-            concat_idx_map = cat(concat_idx_map, valid_idx .+ nbefore, dims = 1)
+            concat_idx_map = cat(concat_idx_map, valid_idx .+ nbefore, dims=1)
         end
-            
+
         nbefore += n
     end
-      
+
     return concat_idx_map
 end
 
-function set_kernel(;kernel_type = "Gaussian", kernel_params_ = [-0.5; 2])
+"""
+    kernel_params_ = set_kernel(;kernel_type = "Gaussian")
 
-    #=
-    Sets a kernel type, amongst supported kernels
-    kernel_type:
-        "Gaussian" string: classical Gausian kernel exp(-0.5 * dist**2 / scale**2)
-        "Laplacian" string: classical Laplacian kernel exp(- dist / scale )
-        callable: should return the log of the kernel. This is applied to callable(dist**2, scale) in the logk function below
-    =#
+# Description
+Sets a kernel type, amongst supported kernels
+
+# Keyword Arguments
+- `kernel_type::String`:
+    - "Gaussian" -> classical Gausian kernel exp(-0.5 * dist^2 / scale^2)
+    - "Laplacian" -> classical Laplacian kernel exp(- dist / scale )
+
+# Return Values
+- `kernel_params_::Array{Float64, 1}`: 2-dimensional vector
+"""
+function set_kernel(; kernel_type = "Gaussian")
+
+    kernel_params_ = Array{Float64,1}(undef, 2)
 
     if typeof(kernel_type) == String
 
@@ -347,29 +377,48 @@ function set_kernel(;kernel_type = "Gaussian", kernel_params_ = [-0.5; 2])
             kernel_params_[1] = -0.5
             kernel_params_[2] = 2
 
-            return kernel_params_
-
         elseif kernel_type == "Laplacian"
 
             kernel_params_[1] = -1
             kernel_params_[2] = 1
 
-            return kernel_params_
         else
 
-            println("Invalid kernel type: only Gaussian and Laplacian are supported, or you should provide your own kernel function taking a squared distance as argument")
+            @warn("Invalid kernel type: Only Gaussian and Laplacian kernels are supported")
+
+            kernel_params_[1] = -0.5
+            kernel_params_[2] = 2
+
         end
 
+    else
+
+        @warn("Invalid kernel type: Enter the strings 'Gaussian' and 'Laplacian' are supported")
+
+        kernel_params_[1] = -0.5
+        kernel_params_[2] = 2
     end
 
-    return nothing
+    return kernel_params_
+
 end
 
+"""
+Wrapper for the function sxy_logk
+"""
 function series_xy_logk_indx(series, scale, npast, nfuture, decay, concat_valid_map, kernel_params_1, kernel_params_2, localdiff)
 
-    if npast <= 1 factor_r_past = 1 else factor_r_past = exp(log(decay)/(npast - 1.)) end
-    if nfuture <= 1 factor_r_future = 1 else factor_r_future = exp(log(decay)/(nfuture - 1.)) end
-    
+    if npast <= 1
+        factor_r_past = 1
+    else
+        factor_r_past = exp(log(decay) / (npast - 1.0))
+    end
+    if nfuture <= 1
+        factor_r_future = 1
+    else
+        factor_r_future = exp(log(decay) / (nfuture - 1.0))
+    end
+
     sum_r_past = 1
     r = 1
 
@@ -379,25 +428,27 @@ function series_xy_logk_indx(series, scale, npast, nfuture, decay, concat_valid_
         sum_r_past += r
     end
 
+    # this factor weights the past sequence
     sum_past_factor = kernel_params_1 / (sum_r_past * scale^kernel_params_2)
     sum_r_future = 1
     r = 1
 
-    for t in npast+1:npast + nfuture - 1
+    for t in npast+1:npast+nfuture-1
 
         r *= factor_r_future
         sum_r_future += r
     end
-    
-    sum_future_factor = kernel_params_1 / (sum_r_future * scale^kernel_params_2)    
-    
+
+    # this factor weights the future sequence
+    sum_future_factor = kernel_params_1 / (sum_r_future * scale^kernel_params_2)
+
     # The job done for each entry in the matrix
     # computes sum of sq diff for past (sx) and future (sy) sequences
     # n is the number of valid (past, future) pairs
     n = length(concat_valid_map)
 
-    sx = Array{Float64, 2}(undef, n, n)
-    sy = Array{Float64, 2}(undef, n, n)
+    sx = Array{Float64,2}(undef, n, n)
+    sy = Array{Float64,2}(undef, n, n)
 
     # Triangular indexing, folded
     # x
@@ -405,11 +456,15 @@ function series_xy_logk_indx(series, scale, npast, nfuture, decay, concat_valid_
     # z z z         w w w w x
     # w w w w
     # outer loops can now be parallelized - all have about the same duration
-   if n%2 == 1  m = n else m = n-1 end
-   
-   Threads.@threads for k in (n+1)÷2:n - 1
+    if n % 2 == 1
+        m = n
+    else
+        m = n - 1
+    end
+    #
+    Threads.@threads for k in (n+1)÷2:n-1
 
-        for l in 0:k - 1
+        for l in 0:k-1
 
             i = k + 1
             j = l + 1
@@ -418,17 +473,15 @@ function series_xy_logk_indx(series, scale, npast, nfuture, decay, concat_valid_
             î = concat_valid_map[i]
             ĵ = concat_valid_map[j]
 
-            sumx, sumy = sxy_logk(î, ĵ, series, npast, nfuture, 
-            localdiff, kernel_params_2, factor_r_past, factor_r_future, sum_r_past, 
-            sum_past_factor, sum_future_factor)
+            sx[i, j], sy[i, j] = sxy_logk(î, ĵ, series, npast, nfuture,
+                localdiff, kernel_params_2, factor_r_past, factor_r_future, sum_r_past,
+                sum_past_factor, sum_future_factor)
 
-            sx[i, j] = sumx
-            sx[j, i] = sumx
-            sy[i, j] = sumy
-            sy[j, i] = sumy
+            #sx[j, i] = sumx # we only need the lower triangle
+            #sy[j, i] = sumy # we only need the lower triangle
         end
 
-        for l in k:m - 1
+        for l in k:m-1
 
             i = m - k + 1
             j = m - l
@@ -437,22 +490,23 @@ function series_xy_logk_indx(series, scale, npast, nfuture, decay, concat_valid_
             î = concat_valid_map[i]
             ĵ = concat_valid_map[j]
 
-            sumx, sumy = sxy_logk(î, ĵ, series, npast, nfuture, 
-            localdiff, kernel_params_2, factor_r_past, factor_r_future, sum_r_past, 
-            sum_past_factor, sum_future_factor)
+            sx[i, j], sy[i, j] = sxy_logk(î, ĵ, series, npast, nfuture,
+                localdiff, kernel_params_2, factor_r_past, factor_r_future, sum_r_past,
+                sum_past_factor, sum_future_factor)
 
-            sx[i, j] = sumx
-            sx[j, i] = sumx
-            sy[i, j] = sumy
-            sy[j, i] = sumy
+            #sx[j, i] = sumx # we only need the lower triangle
+            #sy[j, i] = sumy # we only need the lower triangle
         end
     end
-    
+
     return sx, sy
 end
 
-function sxy_logk(î, ĵ, series, npast, nfuture, localdiff, 
-    kernel_params_2, factor_r_past, factor_r_future, 
+"""
+The workhorse which computes the Gram matrices
+"""
+function sxy_logk(î, ĵ, series, npast, nfuture, localdiff,
+    kernel_params_2, factor_r_past, factor_r_future,
     sum_r_past, sum_past_factor, sum_future_factor)
 
     if localdiff == 1
@@ -464,174 +518,209 @@ function sxy_logk(î, ĵ, series, npast, nfuture, localdiff,
 
         for t in 0:npast-1
 
-            d = series[î - t] .- series[ĵ - t]
+            d = series[î-t] .- series[ĵ-t]
             delta += d * r
             r *= factor_r_past
         end
 
-        delta /= sum_r_past 
+        delta /= sum_r_past
 
     elseif localdiff == 2
         # value of the "present"
         delta = series[î] - series[ĵ]
     end
-    
+
     r = 1
     sumx = 0
 
-    for t in 0:npast - 1
+    for t in 0:npast-1
 
-        d = series[î - t] .- series[ĵ - t]
+        d = series[î-t] - series[ĵ-t]
 
         if localdiff != 0
-            d = d .- delta
+            d = d - delta
         end
 
-        ds = sum(abs2, d)
+        ds = abs2(d)
 
         if kernel_params_2 != 2
-            ds = ds^(0.5*kernel_params_2)
+            ds = ds^(0.5 * kernel_params_2)
         end
 
         sumx += ds * r
         r *= factor_r_past
 
     end
-    
+
     r = 1
     sumy = 0
 
-    for t in 0:nfuture - 1
+    for t in 0:nfuture-1
 
-        d = series[î + 1 + t] .- series[ĵ + 1 + t]
+        d = series[î+1+t] - series[ĵ+1+t]
 
         if localdiff != 0
-            d = d .- delta
+            d = d - delta
         end
 
-        ds = sum(abs2, d)
+        ds = abs2(d)
 
         if kernel_params_2 != 2
-            ds = ds^(0.5*kernel_params_2)
+            ds = ds^(0.5 * kernel_params_2)
         end
 
         sumy += ds * r
         r *= factor_r_future
     end
-    
+
     return sumx * sum_past_factor, sumy * sum_future_factor
 end
 
-function parallel_add_lowtri(total, mat)
-    """
-    WARNING: ONLY ADDS THE LOWER PART
-    """
-    N = size(mat, 1)
-    if N%2 == 1 M = N else M = N-1 end
-        
-    # outer loops can be parallelized - all have about the same duration
-    Threads.@threads for k in (N+1) ÷ 2:N - 1
+"""
+In the interest of saving time, we only add the lower triangles of two matrices together
+"""
+function parallel_add_lowtri!(total, mat)
 
-        for l in 0:k - 1
+    N = size(mat, 1)
+    if N % 2 == 1
+        M = N
+    else
+        M = N - 1
+    end
+
+    # outer loops can be parallelized - all have about the same duration
+    Threads.@threads for k in (N+1)÷2:N-1
+
+        for l in 0:k-1
 
             i = k + 1
             j = l + 1
-            total[i,j] += mat[i,j]
+            total[i, j] += mat[i, j]
         end
-            
-        for l in k:M - 1
+
+        for l in k:M-1
 
             i = M - k + 1
             j = M - l
-            total[i,j] += mat[i,j]
+            total[i, j] += mat[i, j]
         end
     end
 
     Threads.@threads for d in 1:N
 
-        total[d,d] += mat[d,d]
+        total[d, d] += mat[d, d]
     end
 
     return total
 end
 
-function parallel_exp_lowtri(mat, scale)
+"""
+Iterates through the lower triangular part of the matrix, exponentiating the matrix and
+duplicating the results the the upper triangle, i.e. restoring the upper part.
+"""
+function parallel_exp_lowtri!(mat, dims)
 
     N = size(mat, 1)
 
-    if N%2 == 1 M = N else M = N-1 end
+    if N % 2 == 1
+        M = N
+    else
+        M = N - 1
+    end
 
-    invscale = 1/scale
-        
+    invdims = 1 / dims # not sure why this is necessary
+
     # outer loops can be parallelized - all have about the same duration
-    Threads.@threads for k in (N+1) ÷ 2:N - 1
+    Threads.@threads for k in (N+1)÷2:N-1
 
-        for l in 0:k - 1
+        for l in 0:k-1
 
             i = k + 1
             j = l + 1
-            e = exp(mat[i,j] * invscale)
-            mat[i,j] = e
-            mat[j,i] = e
+
+            e = exp(mat[i, j] * invdims)
+
+            mat[i, j] = e
+            mat[j, i] = e
+
         end
-            
+
         for l in k:M-1
 
             i = M - k + 1
             j = M - l
-            e = exp(mat[i,j] * invscale)
-            mat[i,j] = e
-            mat[j,i] = e
+
+            e = exp(mat[i, j] * invdims)
+
+            mat[i, j] = e
+            mat[j, i] = e
         end
     end
 
     Threads.@threads for d in 1:N
 
-        mat[d,d] = exp(mat[d,d] * invscale)
+        mat[d, d] = exp(mat[d, d] * invdims)
     end
 
-    return mat
+    return nothing
 end
 
-function Embed_States(Gx, Gy; ϵ = 1e-8, normalize = true, return_embedder = false)
+"""
+    Gs, (embedder) = embed_states(Gx, Gy; ϵ = 1e-8, normalize = true, return_embedder = false)
 
-    """
-    Compute a similarity matrix for the embedded causal states, seen as distributions P(Y|X), 
-    using the conditional mean embedding.
+Compute a similarity matrix for the embedded causal states, seen as distributions P(Y|X),
+using the conditional mean embedding.
 
-    Arguments:
-        Gx: a similarity matrix of pasts X. Gx[i,j] = kernel_X(x_i, x_j) with kernel_X a reproducing kernel for X.
-        Gy: a similarity matrix of futures Y.
-        ϵ: amount of regularization. The theory requires a regularizer and shows that the regularized 
-        estimator is consistent in the limit of N -> infinity. In practice, using a too small regularizer 
-        may cause divergence, too large causes innaccuracies.
-        normalize: whether to renormalize the returned similarity matrix, so that each entry along the 
-        diagonal is 1. See below.
-        return_embedder: whether to return an embedder object for new, unknown data. Default is False
-        
-    Returns:
+# Arguments:
+- `Gx::Array{Float64, 2}`: A square symmetrical Gram matrix of past events. A similarity
+  matrix of pasts X. Gx[i,j] = k(xᵢ , xⱼ) with kˣ a reproducing kernel for X.
+- `Gy::Array{Float64, 2}`: A square symmetrical Gram matrix of future events
+- `ϵ::Float64`: Amount of regularization. The theory requires a regularizer and shows that
+  the regularized estimator is consistent in the limit of N -> infinity. In practice, using
+  a too small regularizer may cause divergence, too large causes innaccuracies.
+- `normalize::Bool`: normalize: whether to renormalize the returned similarity matrix, so
+  that each entry along the diagonal is 1.
+- `return_embedder::Bool`: whether to return an embedder object for new, unknown data. With
+  normalized kernels, such as used in series_Gxy, the state vectors should also be
+  normalized. Also, theoretically, that matrix should be positive definite. In practice,
+  numerical innacuracies and estimating from finite samples may destroy both previous
+  properties. Renormalization is performed by default, but if positive definiteness issues
+  happens, try using a larger regularizer.
 
-        Gs: A similarity matrix between each causal states. Entries Gs[i,j] can be seen as inner products 
-        between states S_i and S_j. 
-        With normalized kernels, such as used in series_Gxy, then state vectors should also be normalized. 
-        Also, theoretically, that matrix should be positive definite. In practice, numerical innacuracies 
-        and estimating from finite samples may destroy both previous properties. Renormalization is performed 
-        by default, but if positive definiteness issues happens, try using a larger regularizer.
+# Return values:
+- `Gs::Array{Float64, 2}`: A similarity matrix between every causal state. Entries Gs[i,j]
+  can be seen as inner products between states Sᵢ and Sⱼ.
+- `(embedder)::Array{Float64, 2}`: A matrix used for embedding new kˣ kernel similarity
+- vectors.
 
-        embedder: (if return_embedder is True) A matrix for embedding new Kx kernel similarity vectors
-    """
-    
-    #Omega = (Gx + I*ϵ) \ Gx
+"""
+function embed_states(Gx, Gy; ϵ = 1e-8, normalize = true, return_embedder = false)
 
-    Omega = copy(Gx)
-    ldiv!(factorize(Gx + I*ϵ), Omega)
+    #Ω = (Gx + ϵ*I) \ Gx
+    #Ω = (H*Gˣ + N*ϵ*I) \ (H*Gx)
 
-    Omega = Symmetric(Omega) # should not be needed
-    
-    embedder = transpose(Omega) * Gy
-    
-    Gs = embedder * Omega
-    
+    centre_embedder = false # under development
+
+    if !centre_embedder
+
+        Ω = copy(Gx) # this is our weight matrix
+        ldiv!(cholesky(Gx + ϵ*I), Ω)
+
+    else
+
+        N = size(Gx, 1)
+        H = I - (1/N)*ones(N)*transpose(ones(N)) # centring matrix
+
+        Ω = H*copy(Gx) # this is our centred weight matrix? normalised? breaks the symmetry?
+        ldiv!(cholesky(H*Gx + N*ϵ*I), Ω)
+    end
+
+    Ω = Symmetric(Ω) # should not be needed
+
+    embedder = transpose(Ω) * Gy
+
+    Gs = embedder * Ω
+
     if normalize
 
         #= This normalization is especially useful for avoiding numerical
@@ -663,9 +752,9 @@ function Embed_States(Gx, Gy; ϵ = 1e-8, normalize = true, return_embedder = fal
 
         # just to be extra safe, avoid floating-point residual errors
         Gs[diagind(Gs)] .= 1.0
-        
+
     end
-    
+
     if return_embedder
 
         return Gs, embedder

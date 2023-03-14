@@ -1,6 +1,8 @@
 using Complexity
 using LinearAlgebra
 
+println("...........o0o----ooo0§0ooo~~~  START  ~~~ooo0§0ooo----o0o...........")
+
 # number of samples
 m = 1000
 
@@ -8,7 +10,7 @@ m = 1000
 ε = 10e-4
 
 # data
-x = Array{Int64, 1}(undef, m) 
+x = Array{Int64, 1}(undef, m)
 y = Array{Int64, 1}(undef, m)
 
 # feature functions
@@ -18,56 +20,8 @@ y = Array{Int64, 1}(undef, m)
 Υ = Array{Float64, 2}(undef, 2, m)
 Φ = Array{Float64, 2}(undef, 2, m)
 
-# Gram matrices
-Gˣ = Array{Float64, 2}(undef, m, m) 
-Gʸ = Array{Float64, 2}(undef, m, m)
-
-# kernel mean
-μx = Array{Float64, 1}(undef, 2) 
-μy = Array{Float64, 1}(undef, 2)
-
-# kernel (uncentered) cross-covariance
-Cxx = Array{Float64, 2}(undef, 2, 2) 
-Cyy = Array{Float64, 2}(undef, 2, 2)
-Cyx = Array{Float64, 2}(undef, 2, 2) 
-Cxy = Array{Float64, 2}(undef, 2, 2) 
-
-# kernel (centered) cross-covariance
-Cxxₕ = Array{Float64, 2}(undef, 2, 2) 
-Cyyₕ = Array{Float64, 2}(undef, 2, 2)
-Cyxₕ = Array{Float64, 2}(undef, 2, 2) 
-Cxyₕ = Array{Float64, 2}(undef, 2, 2) 
-
-# kernel conditional embedding
-Cy_x = Array{Float64, 2}(undef, 2, 2) 
-Cx_y = Array{Float64, 2}(undef, 2, 2) 
-
-# (centered)kernel conditional embedding
-Cy_xₕ = Array{Float64, 2}(undef, 2, 2) 
-Cx_yₕ = Array{Float64, 2}(undef, 2, 2) 
-
-# kernel conditional mean
-μy_x = Array{Float64, 2}(undef, 2, 2) 
-μx_y = Array{Float64, 2}(undef, 2, 2)
-
-# (centered) kernel conditional mean
-μy_xₕ = Array{Float64, 2}(undef, 2, 2) 
-μx_yₕ = Array{Float64, 2}(undef, 2, 2)
-
 # centring matrix
 H = I - (1/m)*ones(m)*transpose(ones(m))
-
-# weight vector
-ωx = Array{Float64, 2}(undef, m, 2)
-ωy = Array{Float64, 2}(undef, m, 2)
-
-# centered weight vector
-ωxₕ = Array{Float64, 2}(undef, m, 2)
-ωyₕ = Array{Float64, 2}(undef, m, 2)
-
-# kernel matrix
-kx = Array{Float64, 2}(undef, m, 2)
-ky = Array{Float64, 2}(undef, m, 2)
 
 for i in 1:m
 
@@ -91,50 +45,70 @@ for i in 1:m
     Φ[:,i] = ϕ[y[i],:]
 end
 
+# kernel mean
 μx = (1/m)*sum(Υ, dims = 2)
 μy = (1/m)*sum(Φ, dims = 2)
 
+# kernel (uncentered) cross-covariance
 Cxx = (1/m)*Υ*transpose(Υ)
 Cyy = (1/m)*Φ*transpose(Φ)
 Cyx = (1/m)*Φ*transpose(Υ)
 Cxy = (1/m)*Υ*transpose(Φ)
 
+# kernel (centered) cross-covariance
 Cxxₕ = (1/m)*Υ*H*transpose(Υ) # (1/m)*(Υ - μx*transpose(ones(m)))*transpose((Υ - μx*transpose(ones(m))))
 Cyyₕ = (1/m)*Φ*H*transpose(Φ) # (1/m)*(Φ - μy*transpose(ones(m)))*transpose((Φ - μy*transpose(ones(m))))
 Cyxₕ = (1/m)*Φ*H*transpose(Υ) # (1/m)*(Φ - μy*transpose(ones(m)))*transpose((Υ - μx*transpose(ones(m))))
 Cxyₕ = (1/m)*Υ*H*transpose(Φ) # (1/m)*(Υ - μx*transpose(ones(m)))*transpose((Φ - μy*transpose(ones(m))))
 
+# Gram matrices
 Gˣ = transpose(Υ)*Υ
 Gʸ = transpose(Φ)*Φ
 
+# kernel conditional embedding
 Cy_x = Φ*((Gˣ + ε*I)\transpose(Υ)) # Cyx*inv(Cxx)
 Cx_y = Υ*((Gʸ + ε*I)\transpose(Φ)) # Cxy*inv(Cyy)
 
+# (centered)kernel conditional embedding
 Cy_xₕ = Cyxₕ*inv(Cxxₕ + ε*I) # Φ*inv(H*Gˣ + m*ε*I)*H*transpose(Υ)
 Cx_yₕ = Cxyₕ*inv(Cyyₕ + ε*I) # Υ*inv(H*Gʸ + m*ε*I)*H*transpose(Φ)
 
+# kernel matrix
 kx = transpose(Υ)*ϕ
 ky = transpose(Φ)*ϕ
 
+# weight vector
 ωx = (Gˣ + ε*I)\kx
 ωy = (Gʸ + ε*I)\ky
 
+Ωx = (Gˣ + ε*I)\Gˣ
+Ωy = (Gʸ + ε*I)\Gʸ
+
+# centered weight vector
 ωxₕ = (H*Gˣ + m*ε*I)\(H*kx)
 ωyₕ = (H*Gʸ + m*ε*I)\(H*ky)
 
+Ωxₕ = (H*Gˣ + m*ε*I)\(H*Gˣ)
+Ωyₕ = (H*Gʸ + m*ε*I)\(H*Gʸ)
+
+# kernel conditional mean
 μy_x = Φ*ωx
 μx_y = Υ*ωy
 
+# state similarity matrix
+Gsˣ = transpose(ωx)*Gʸ*ωx
+
+# (centered) kernel conditional mean
 μy_xₕ = Φ*ωxₕ
 μx_yₕ = Υ*ωyₕ
 
-@show round.(Cy_x - Cyx*inv(Cxx), digits = 5)
-@show round.(μy_x[:,1] - Cy_x*ϕ[1,:], digits = 5)
-@show round.(μy_x[:,2] - Cy_x*ϕ[2,:], digits = 5)
-
-@show round.(Cx_y - Cxy*inv(Cyy))
-@show round.(μx_y[:,1] - Cxy*inv(Cyy)*ϕ[1,:], digits = 5)
-@show round.(μx_y[:,2] - Cxy*inv(Cyy)*ϕ[2,:], digits = 5)
+check = Array{Float64, 1}(undef, 6)
+check[1] = maximum(round.(Cy_x - Cyx*inv(Cxx), digits = 5))
+check[2] = maximum(round.(μy_x[:,1] - Cy_x*ϕ[1,:], digits = 5))
+check[3] = maximum(round.(μy_x[:,2] - Cy_x*ϕ[2,:], digits = 5))
+check[4] = maximum(round.(Cx_y - Cxy*inv(Cyy)))
+check[5] = maximum(round.(μx_y[:,1] - Cxy*inv(Cyy)*ϕ[1,:], digits = 5))
+check[6] = maximum(round.(μx_y[:,2] - Cxy*inv(Cyy)*ϕ[2,:], digits = 5))
 
 println("\nCxx = ")
 display(Cxx)
@@ -165,10 +139,10 @@ println("hsicₕ = ",hsicₕ)
 #-------------------------------------------------------------------------------
 # Kernel Sum Rule
 
-μxᵖ  = Array{Float64, 1}(undef, 2) 
+μxᵖ  = Array{Float64, 1}(undef, 2)
 μyᵖ = Array{Float64, 1}(undef, 2)
 
-Cxxᵖ  = Array{Float64, 2}(undef, 2, 2) 
+Cxxᵖ  = Array{Float64, 2}(undef, 2, 2)
 Cyyᵖ = Array{Float64, 2}(undef, 2, 2)
 
 αy = Φ\μy
@@ -192,7 +166,7 @@ Dˣ = diagm(vec((Gˣ + ε*I)\(Gˣ*αx)))
 Cxyᵖ = Υ*Λʸ*transpose(Φ) # Cx_y*Cyy # Υ*Dʸ*transpose(Φ)
 Cyxᵖ = Φ*Λˣ*transpose(Υ) # Cy_x*Cxx # Φ*Dˣ*transpose(Υ) # Φ*transpose(Λʸ)*transpose(Υ)
 
-Cxxᵖ = Υ*Λˣ*transpose(Υ) # Υ*Dˣ*transpose(Υ) 
+Cxxᵖ = Υ*Λˣ*transpose(Υ) # Υ*Dˣ*transpose(Υ)
 Cyyᵖ = Φ*Λʸ*transpose(Φ)
 
 #-------------------------------------------------------------------------------
@@ -208,3 +182,5 @@ Cxxᵖ = Υ*Dʸ*transpose(Υ)
 β_x = transpose(Λʸ)*(((Dʸ*Gˣ)^2 + εᵖ*I)\(Gˣ*Dʸ*kx))
 
 μy_xᵖ = Φ*β_x # Φ*Dʸ*Gˣ*(((Dʸ*Gˣ)^2 + εᵖ*I)\(Dʸ*kx)) # Cyxᵖ*((Cxxᵖ + εᵖ*I)\(ϕ))
+
+println("...........o0o----ooo0§0ooo~~~   END   ~~~ooo0§0ooo----o0o...........\n")

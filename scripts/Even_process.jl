@@ -39,17 +39,22 @@ end
 
 @time begin
 
-    println("\n1. Generating gram matrices")
-    Gx, Gy, index_map = series_Gxy([series], scale, npast, nfuture)
+    @time begin
+        println("\n1. Generating gram matrices")
+        Gx, Gy, index_map = series_Gxy(series, scale, npast, nfuture)
+    end
 
     # Compute the state similarity matrix.
     println("\n2. Computing Gs")
-    Gs = Embed_States(Gx, Gy)
+    @time begin
+        Gs = embed_states(Gx, Gy)
+    end
 
     # Compute a spectral basis for representing the causal states.
     println("\n3. Projection")
-    eigenvalues, basis, coords = Spectral_Basis(Gs, num_basis = 2, scaled = false)
-
+    @time begin
+        eigenvalues, basis, coords = spectral_basis(Gs, num_basis = 2)
+    end
 end
 
 df = DataFrame(Ψ₁ = coords[:,2])

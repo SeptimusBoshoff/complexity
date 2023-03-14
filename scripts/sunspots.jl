@@ -15,8 +15,6 @@ sampling = 1 # machine retains 1 in every so many samples
 history = 22*12 # backward trajectory [months]
 future = 22*12 # forward trajectory [months]
 
-scale = 1 #bandwidth, i.e. Kernel Scale
-
 #-------------------------------------------------------------------------------
 # Machine Perspective
 
@@ -58,7 +56,7 @@ true_valy_vals = -1*valy_vals[findall(x->x > 0.4*maximum(proms), proms)]
 
 # and take the average maxima as the relevant scale.
 # This means, we focus on variations of that order of magnitude over
-# the given time scales
+# the given time scales, bandwidth, i.e. Kernel Scale
 scale = sum(true_pk_vals)/length(true_pk_vals) - sum(true_valy_vals)/length(true_valy_vals)
 
 #-------------------------------------------------------------------------------
@@ -68,44 +66,45 @@ scale = sum(true_pk_vals)/length(true_pk_vals) - sum(true_valy_vals)/length(true
 
     #= 1. Generating gram matrices =#
     println("\n1. Generating gram matrices")
-    Gx, Gy, index_map = series_Gxy([data], scale, npast, nfuture)
+    Gx, Gy, index_map = series_Gxy(data, scale, npast, nfuture)
 
     #=2. Computing Gs
         Compute the state similarity matrix.
-        Embedding to get the similarity matrix between conditional distributions 
+        Embedding to get the similarity matrix between conditional distributions
     =#
     println("\n2. Computing Gs")
-    Gs = Embed_States(Gx, Gy)
+    Gs = embed_states(Gx, Gy)
 
     #= 3. Projection1
         Compute a spectral basis for representing the causal states.
         Find a reduced dimension embedding and extract the significant coordinates
     =#
     println("\n3. Projection")
-    eigenvalues, basis, coords = Spectral_Basis(Gs, num_basis = 30, scaled = true)
+    eigenvalues, basis, coords = spectral_basis(Gs, num_basis = 30)
 
     #= 4. Forward Shift Operator
         This is the forward operator in state space. It is built from consecutive
         indices in the index map. Data series formed by multiple contiguous time
-        blocks are supported, as well as the handling of NaN values 
+        blocks are supported, as well as the handling of NaN values
     =#
     println("\n4. Forward Shift Operator")
-    shift_op = Shift_Operator(coords, eigenvalues, index_map = index_map)
+    shift_op = shift_operator(coords, eigenvalues, index_map = index_map)
 
     #= 5. Expectation Operator
         This is the expectation operator, using its default function that predicts
-        the first entry in the future sequence from the current state distribution. 
-        You can specify other functions, see the documentation 
+        the first entry in the future sequence from the current state distribution.
+        You can specify other functions, see the documentation
     =#
     println("\n5. Expectation Operator")
-    expect_op = Expectation_Operator(coords, index_map, [data])
+    expect_op = expectation_operator(coords, index_map, [data])
 
     #= 6. Prediction
         Start from the last known point (represented by its coordinates) and
-        evolve the state for nfuture+1 points. 
+        evolve the state for nfuture+1 points.
     =#
     println("\n6. Prediction")
-    pred, dist = Predict(2*N - window_size + nfuture, coords[1, :], shift_op, expect_op, return_dist = 2, knn_convexity = 5, knndim = 5, coords = coords, extent = 0.05)
+    pred, dist = predict(2*N - window_size + nfuture, coords[1, :], shift_op, expect_op,
+    return_dist = 2, knn_convexity = 5, knndim = 5, coords = coords, extent = 0.05)
 end
 
 #-------------------------------------------------------------------------------
@@ -129,8 +128,8 @@ predictions = vec([nans_past; pred[1]])
 data_extend = vec([data; nans_pred])
 smoothed_extend = vec([smoothed_sunspots; nans_pred])
 
-df_sunspots = DataFrame(months = t, sunspots = data_extend, 
-                        predictions = predictions, 
+df_sunspots = DataFrame(months = t, sunspots = data_extend,
+                        predictions = predictions,
                         smoothed = smoothed_extend)
 
 trace_sunspots = scatter(df_sunspots, x = :months, y = :sunspots, name = "sunspots")
@@ -140,7 +139,7 @@ trace_predictions = scatter(df_sunspots, x = :months, y = :predictions, name = "
 plot_sun_t = plot([trace_sunspots, trace_predictions],
                 Layout(
                     title = attr(
-                        text = "Sunspots monthly series from SILSO",  
+                        text = "Sunspots monthly series from SILSO",
                     ),
                     title_x = 0.5,
                     xaxis_title = "Months",
@@ -161,13 +160,13 @@ trace_Φ = scatter3d(df_Ψ_Φ, x = :Φ₁, y = :Φ₂, z = :Φ₃, name = "Φ", 
 plot_Ψ_Φ_3d = plot([trace_Ψ, trace_Φ],
                 Layout(
                     title = attr(
-                        text = "Sunspots: Reconstructed State Space",  
+                        text = "Sunspots: Reconstructed State Space",
                     ),
                     title_x = 0.5,
                     scene = attr(
                         xaxis_title = "Ψ₁",
                         yaxis_title = "Ψ₂",
-                        zaxis_title = "Ψ₃",  
+                        zaxis_title = "Ψ₃",
                     ),
                     scene_aspectratio = attr(x = 1, y = 1, z = 3),
                     scene_camera = attr(
@@ -180,5 +179,10 @@ plot_Ψ_Φ_3d = plot([trace_Ψ, trace_Φ],
 
 display(plot_Ψ_Φ_3d)
 
+trace = surface(z = coords[:,2:5], showscale = false)
+layout = Layout(title = "Eigenfunctions", autosize = true,
+                scene_aspectratio = attr(x = 2, y = 2, z = 1),)
+
+#display(plot(trace, layout))
 
 println("\n...........o0o----ooo0§0ooo~~~   END   ~~~ooo0§0ooo----o0o...........\n")

@@ -4,10 +4,10 @@ using ArnoldiMethod
 import Ipopt
 using JuMP
 using LinearAlgebra
-using LinearMaps
 using Logging
 using NearestNeighbors
 using NonNegLeastSquares
+using Revise
 using Test
 
 include("./Kernel_Machine.jl")

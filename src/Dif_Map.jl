@@ -1,53 +1,51 @@
-function Spectral_Basis(Gs; num_basis = nothing, scaled = false, alpha = 1)
 
-    """
-    Spectral decomposition of the similarity matrix, *after normalization*.
-    This uses a variant of the diffusion map algorithm, applied directly to the provided similarity matrix, which replaces the "diffusion" step of the diffusion maps.
+"""
+    eigenvalues, basis, coords = spectral_basis(Gs; num_basis = nothing, scaled = true, alpha = 1)
 
-    Parameters
-    ----------
-    Gs : Array of size (N, N)
-        A precomputed similarity matrix.
-        
-    num_basis : number, optional
-        Specifies the number of components to retain:
-            
-        - If num_basis is None (default), then N//2 eigenvalues are retained.
-        - If num_basis <= 0, all components are retained
-        - If num_basis >=1, this specifies directly the number of components
-        - If 0 < num_basis < 1, this specifies a threshold below which eigenvalues are discarded.
-        
-        The default of N//2 is somewhat arbitrary and you should check what value is adequate for your problem. However, the hope is that the exact value does not matter much: preliminary tests on diverse data sets suggest there is a large plateau with acceptable performances (and then, a decrease as num_basis increases). Note that using all eigenvalues is generally a bad idea: the (necessary) eps parameter used in embed_states introduces a minimal and spurious eigenvalue. Due to the MMD test, the distance between states is also inacurate to some extent (depending on N). And the shift operator definition implicitly uses a matrix inverse, which is badly conditionned when spurious and meaningless eigenvalues are retained. Also, the kernel scale used for building Gx and Gy matters, since it sets the similarity between points, states, hence the sensitivity to small details or to large fluctuations, hence ultimately the eigenspectrum of Gs. One possiblity is to use cross-validation, for example using the accuracy of reconstructing the last nfuture values of the series. 
-        
-    alpha : float, optional
-        Normalization exponent for the diffusion-map like algorithm. 
-        
-        The default of 1 allows the inference of the geometry, with minimal interference from the density.
-        
-    overwrite : Bool, optional
-        Whether to use the memory in Gs for the computations. This has no effect when using Dask. False by default.
+# Description
+Eigenvalue spectral decomposition of the similarity matrix, after normalising the matrix
+such that it becomes a Markov chain. This uses a variant of the diffusion map algorithm,
+applied directly to the provided similarity matrix, which replaces the "diffusion" step of
+the diffusion maps. The decay of the spectrum is a measure of the connectivity of data
+points in the RKHS. Together, the eigenvalues and eigenvectors provide a basis for the data
+set, a reduced embedding in Euclidian space. The distances in this space, the diffusion
+space, are so called 'diffusion distances', if Gs were constructed to be a 'diffusion
+matrix', which it mostly is - but with extra steps.
 
-    Returns
-    -------
-    eigenvalues : array of size M
-        The eigenvalues of the spectral decomposition. M is the number of components retained, see the num_basis parameter. The first eigenvalue is always 1 due to the normalization. All other eigenvalues should be greater than 0, unless Gs is badly built (in that case, check the data scale parameter in series_Gxy).
+# Arguments
+- `Gs::Array{Float64, 2}`: A 'N x N' precomputed similarity matrix between every causal
+  state. Entries Gs[i,j] can be seen as inner products between states Sᵢ and Sⱼ.
 
-    basis : array of size (N, M)
-        The M basis vectors, each of size N, represented as columns. These are also the left eigenvectors of the spectral decomposition. The first vector corresponds to a density and is normalized to sum to 1. The others should all sum to 0. The basis vectors all have the same norm.
-        
-    coords : array of size (N, M)
-        The N coordinates, one for each entry in Gs. Each coordinate is a vector or of dimension M, matching the M basis vectors. The first coordinate is always the constant 1 and can be discarded for purposes such as distance comparisons (knn queries), manifold reconstruction, visualization, etc. The coordinates are the right eigenvectors of the spectral decomposition, scaled to be bi-orthogonal with the basis.
+# Keyword Arguments
+- `num_basis::Int or Float`:
+    - If 'nothing' then 'N/2' eigenvalues are retained. A somewhat arbitrary and should be
+      verified that the value is adequate.
+    - If '<= 0', then all eigenvalues are retained. This is generally ill advised. Due to
+      previous steps (embed_states) a spurious eigenvalues may be artificially created,
+      which impacts the results of future steps (shift_operator).
+    - If '<= 1', the specifies the number of basis components.
+    - If '0 < num_basis < 1', specifies a threshold below which eigenvalues are discarded.
+- `scaled::Bool`: Determines whether the right eigenvectors are scaled or returned as is.
+- `alpha::Float`: An optional normalization exponent between '0' and '1' for the
+  diffusion-map like algorithm. The dafault of '1' allows for the inference of geometry,
+  with minimal interference from the density.
 
-    Notes
-    -----
+# Return Values
+- `eigenvalues::Vector{Float64}`: A vector whose size is dependent on 'num_basis'. Due to
+  normalisation the first eigenvalue is always '1'. All other eigenvalues are listed in
+  decending order and should be positive.
+- `basis::Array{Float64, 2}`: A 'M x N' matrix where every row corresponds to a basis, a
+  left eigenvector. The first row corresponds to the stationary distribution and is
+  normalized to sum to '1'. All other rows should sum up to '0'.
+- `coords::Array{Float64, 2}`: A 'N x M' matrix where every column is either a right
+  eigenvector or a right eigenvector scaled by its corresponding eigenvlaue. Every vector
+  can be considered to be a point in the diffusion space, a diffusion coordinate so to
+  speak. The first coordinate of every point is normalised such that it is always 1 and can
+  be discarded for purposes such as distance comparisons, manifold reconstruction,
+  visualisation, etc.
 
-    The pre-normalization step makes this *not* equivalent to a classical eigen or singular decomposition. Distances using the resulting coordinates would correspond to "diffusion distances", assuming Gs is a "diffusion matrix" built like the "diffusion map" algorithm. Although, since we use a completely different building  scheme, this is not a diffusion at all.
-
-    The choice is to provide coordinates scaled with a constant of 1 in the dimension of the eigenvalue 1. This provides consistent values for coordinates along each dimension, with a range close to 1. This also greatly simplifies the computations of the shift operator and avoids division by small values, while being mathematically equivalent in the prediction results. One should however remember that the coordinates should be scaled by the eigenvalues for their relative influence in distance-based algorithms, such as finding nearest neighbors. The scaled distance has some interpretation as explained in the "diffusion map litterature".
-
-    The use of a precision for selecting the number of eigenbasis components is not implemented in Dask mode, since all Dask does is create an operation graph and this would trigger a computation.
-
-    """
+"""
+function spectral_basis(Gs; num_basis = nothing, scaled = true, alpha = 1)
 
     N = size(Gs, 1)
 
@@ -86,66 +84,73 @@ function Spectral_Basis(Gs; num_basis = nothing, scaled = false, alpha = 1)
         q = (1) ./ q
 
         mat = mat .* q
-        mat = mat .* transpose(q)
+        mat = mat .* transpose(q) # used for left eigenvectors?
 
     end
 
-    q = (1) ./ vec(sum(mat, dims = 2))
+    q = vec(sum(mat, dims = 2))
 
-    # krylovdim = N (worst case) or krylovdim = num_basis + 1
-    #= eigval, eigvec, _ = geneigsolve((mat, inv(diagm(q))), num_basis, :LM; issymmetric = true, krylovdim = num_basis + 1)
-    eigvec = reduce(hcat, eigvec)
-
-    println("\neigval = ")
-    display(eigval) =#
-
-    decomp,_  = partialschur(diagm(q)*mat, nev = num_basis, 
+    # using ArnoldiMethodTransformations for generalised eigen
+    decomp, history  = partialschur(Diagonal((1) ./ q)*mat, nev = num_basis,
     tol = 1e-6, restarts = 200, which = LM())
     eigval, eigvec = partialeigen(decomp)
 
-    order = sortperm(eigval, rev = true)
-    eigval = eigval[order]
-    eigvec = eigvec[:, order]
-    
+    order = sortperm(real.(eigval), rev = true)
+    eigval = real.(eigval[order])
+    eigvec = real.(eigvec[:, order])
+
     if eigen_cutoff >= 0
 
         num_basis = sum(eigval .>= eigen_cutoff)
     end
-    
+
     if num_basis < size(eigval, 1)
-        # copies avoid to keep the full matrix referenced
+
         eigval = eigval[1:num_basis]
         eigvec = eigvec[:, 1:num_basis]
     end
-    
+
     # Normalization so that eigvec_r[:,1] entries are all 1
     # and that eigvec_l[:,1] matches a density
 
     eigvec_r = eigvec ./ eigvec[:, 1]
-    eigvec_l = eigvec .* (q * eigvec[1,1])
+    eigvec_l = transpose(eigvec .* (eigvec[:,1]))
+
+    if !history.converged
+
+        @warn(history)
+
+        check = maximum(vec(sum(Diagonal((1) ./ q)*mat, dims = 1))) # should be close to 1
+    end
+
+    if (norm(mat * eigvec_r - Diagonal(q)*eigvec_r * Diagonal(eigval)) > 1e-6 ||
+        norm(eigvec_l*mat - Diagonal(eigval)*eigvec_l*Diagonal(q)) > 1e-6 ||
+        maximum(abs.(sum(eigvec_l[2:end, :], dims = 2))) > 4e-4)
+
+        @warn("The eigenvectors weren't correctly computed.")
+
+        @show norm(mat * eigvec_r - Diagonal(q)*eigvec_r * Diagonal(eigval))
+        #@show norm(Diagonal((1) ./ q)*mat * eigvec_r - eigvec_r * Diagonal(eigval))
+
+        @show norm(eigvec_l*mat - Diagonal(eigval)*eigvec_l*Diagonal(q))
+        #@show norm(eigvec_l*Diagonal((1) ./ q)*mat - Diagonal(eigval)*eigvec_l)
+
+        @show maximum(abs.(sum(eigvec_l[2:end, :], dims = 2)))
+
+    end
+
+    if (sum(eigvec_l[1,:]) - 1 > 1e-6 ||
+        norm((q/sum(q)) .- eigvec_l[1,:]) > 1e-5)
+
+        @warn("The stationary distribution was not correctly calculated")
+        @show sum(eigvec_l[1,:]) - 1
+        @show norm((q/sum(q)) .- eigvec_l[1,:])
+
+    end
 
     if scaled
-        return eigval, eigvec_l, eigvec_r .* transpose(eigval)
+        return eigval, eigvec_l, transpose(eigval).*eigvec_r
     end
 
     return eigval, eigvec_l, eigvec_r
-end
-
-struct ShiftAndInvert{TA,TB,TT}
-
-    A_lu::TA
-    B::TB
-    temp::TT
-end
-
-function (M::ShiftAndInvert)(y,x)
-
-    mul!(M.temp, M.B, x)
-    ldiv!(y, M.A_lu, M.temp)
-end
-    
-function construct_linear_map(A,B)
-
-    a = ShiftAndInvert(factorize(A), B, Vector{eltype(A)}(undef, size(A,1)))
-    LinearMap{eltype(A)}(a, size(A,1), ismutating=true)
 end
