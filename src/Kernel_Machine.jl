@@ -1,5 +1,10 @@
-#_______________________________________________________________________________
-# Kernel Machines
+#= Authors:
+    Source code adapted from the Continuous Causal States method, described in the paper :
+    Discovering Causal Structure with Reproducing-Kernel Hilbert Space ε-Machines by Nicolas
+    Brodu and James P. Crutchfield
+    Original code in python converted to julia code by Septimus Boshoff
+=#
+
 """
     series_Gxy(series, scale, npast, nfuture; kernel_type = "Gaussian", decay = 1,
     qcflags = nothing, localdiff = 0, take2skipX = 0)
@@ -693,7 +698,6 @@ using the conditional mean embedding.
   can be seen as inner products between states Sᵢ and Sⱼ.
 - `(embedder)::Array{Float64, 2}`: A matrix used for embedding new kˣ kernel similarity
 - vectors.
-
 """
 function embed_states(Gx, Gy; ϵ = 1e-8, normalize = true, return_embedder = false)
 

@@ -1,3 +1,9 @@
+#= Authors:
+    Source code adapted from the Continuous Causal States method, described in the paper :
+    Discovering Causal Structure with Reproducing-Kernel Hilbert Space ε-Machines by Nicolas
+    Brodu and James P. Crutchfield
+    Original code in python converted to julia code by Septimus Boshoff
+=#
 
 """
     eigenvalues, basis, coords = spectral_basis(Gs; num_basis = nothing, scaled = true, alpha = 1)

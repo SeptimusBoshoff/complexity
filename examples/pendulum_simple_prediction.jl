@@ -74,11 +74,11 @@ data = [vec(x), vec(y)]
 
 #******* Writing to CSV
 #= dateframe_x_y_t = DataFrame(x = x, y = y, t = tₘ)
-CSV.write("pendulum.csv", dateframe_x_y_t) =#
+CSV.write("data//pendulum.csv", dateframe_x_y_t) =#
 #*******
 
 #******* or read from CSV
-#= df = CSV.read(joinpath(pwd(), "pendulum.csv"), DataFrame)
+#= df = CSV.read(joinpath(pwd(), "data//pendulum.csv"), DataFrame)
 data = [df.x[1:end], df.y[1:end]] =#
 #*******
 
@@ -123,22 +123,6 @@ scale = [maximum(data[1])-minimum(data[1]); maximum(data[2])-minimum(data[2])]
 
     pred, dist = predict(2*nfuture, coords[end - nfuture, :], shift_op, expect_op, return_dist = 2)
     final_dist = dist[:, end]
-
-    # Option 2.
-    # Build an initial state distribution for making predictions. This uses the
-    # very last data, which has no "future" in the observation series, and this
-    # is precisely what we want to predict.
-    # step 1. Build a kernel similarity vector with sample data
-    new_data = [data[1][end-npast-nfuture:end-nfuture], data[2][end-npast-nfuture:end-nfuture]]
-    Kx = series_newKx(new_data, data, index_map, scale, npast)
-    # step 2. Embed to get similarity vector in state space
-    Ks = embed_Kx(Kx, Gx, embedder)
-    # step 3. Build a probability distribution over states.
-    nw_coords = new_coords(Ks, Gs, coords)
-
-    pred_2, dist_2 = predict(2*nfuture, nw_coords[end, :], shift_op, expect_op, return_dist = 2)
-    final_dist_2 = dist_2[:, end]
-
 end
 
 #-------------------------------------------------------------------------------

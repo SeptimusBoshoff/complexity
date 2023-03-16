@@ -1,8 +1,9 @@
-"""
-Source code adapted from the Continuous Causal States method, described in the paper :
-  Discovering Causal Structure with Reproducing-Kernel Hilbert Space ε-Machines by Nicolas
-  Brodu and James P. Crutchfield
-"""
+#= Authors:
+    Source code adapted from the Continuous Causal States method, described in the paper :
+    Discovering Causal Structure with Reproducing-Kernel Hilbert Space ε-Machines by Nicolas
+    Brodu and James P. Crutchfield
+    Original code in python converted to julia code by Septimus Boshoff
+=#
 
 function shift_operator(coords, eigenvalues; index_map = nothing, return_eigendecomposition = false)
     """
@@ -529,37 +530,45 @@ function predict(npred, state_dist, shift_op, expect_op; return_dist = 0, bounds
     return pred
 end
 
+"""
+    state_dist = new_coords(Ks, Gs, coords; method = "nnls")
+
+# Description
+Compute the best matching state distributions.
+
+# Arguments
+- `Ks::Array{Float64, 2}`: A 'N x L' matrix of kernel similarity vectors between a new state
+  estimate and reference states. Such vectors can be computed using the series_newKx for
+  time series data and embedding that result with embed_Kx. L is the number of such vectors,
+  one per column.
+- `Gs::Array{Float64, 2}`: A similarity matrix between every causal state. Entries Gs[i,j]
+  can be seen as inner products between states Sᵢ and Sⱼ.
+- `coords::Array{Float64, 2}`: A 'N x M' matrix where every column is a coordinate in
+  diffusion space. These are returned by the spectral_basis function.
+
+# Keyword Arguments
+- `method::String`: What method to use for computing the state distribution.
+    - "nnls" -> uses non-negative least squares to ensure that the new state estimate
+      remains within the boundaries of existing states.
+    - "unbounded" -> unbounded estimate, equivalent to a Nyström extension, which is then
+      normalized into a pseudo-distribution.
+
+# Return Values
+- `state_dist::Array{Float64, 2}`: array of size 'M x L' The state distribution, represented
+  as coefficients in the eigenbasis. The first entry of the state distribution is always be
+  1.0 In order to retreive a proper probability distribution, you can do q = basis @
+  state_dist. Note that, after evolution by the shift operator, the expression of the causal
+  states as linear combinations of RKHS basis elements may induce that some entries of q
+  that are negative. q is both the distribution, and its expression as a linear combination
+  on the RKHS samples.
+
+"""
 function new_coords(Ks, Gs, coords; method = "nnls")
-    """
-    Compute a state distribution
-
-    Parameters
-    ----------
-    Ks : array of size (N, L)
-        These are the kernel similarity vectors between a new state estimate and reference states. Such vectors can be computed using the series_newKx for time series data and embedding that result with embed_Kx
-        L is the number of such vectors, one per column
-
-    Gs : array of size (N, N)
-        The Gram matrix between known states
-
-    coords : array of size (N, M)
-        diffusion map coordinates for each sample. These are returned by the spectral_basis function.
-
-    method : string, optional
-        What method to use for computing the state distribution. This parameter is subject to change. Values are
-            + 'nnls': (default) uses non-negative least squares to ensure that the new state estimate remains within the boundaries of existing states. This is similar to kernel moment matching, see the paper
-            + 'unbounded': unbounded estimate, equivalent to a Nyström extension, which is then normalized into a pseudo-distribution.
-
-    Returns
-    -------
-    state_dist : array of size (M, L)
-        The state distribution, represented as coefficients in the eigenbasis. The first entry of the state distribution is always be 1. In order to retreive a proper probability distribution, you can do q = basis @ state_dist. Note that, after evolution by the shift operator, the expression of the causal states as linear combinations of RKHS basis elements may induce that some entries of q are negative. q is both the distribution, and its expression as a linear combination on the RKHS samples.
-    """
 
     if method == "unbounded"
 
         Ω = copy(Ks)
-        ldiv!(factorize(Gs), Ω) # Gs \ Ks
+        ldiv!(bunchkaufman(Gs), Ω) # Gs \ Ks
 
     else
 

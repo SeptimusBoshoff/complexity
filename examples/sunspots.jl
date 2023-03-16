@@ -23,7 +23,7 @@ nfuture = convert(Int, round(future/sampling)) #Future series sample size
 
 window_size = npast + nfuture
 
-df = CSV.read(joinpath(pwd(), "SN_m_tot_V2.0.csv"), DataFrame, header = false)
+df = CSV.read(joinpath(pwd(), "data//SN_m_tot_V2.0.csv"), DataFrame, header = false)
 year = df.Column1
 month = df.Column2
 data = df.Column4[1:sampling:end] # sunspots
