@@ -1,3 +1,8 @@
+"""
+Source code adapted from the Continuous Causal States method, described in the paper :
+  Discovering Causal Structure with Reproducing-Kernel Hilbert Space ε-Machines by Nicolas
+  Brodu and James P. Crutchfield
+"""
 
 function shift_operator(coords, eigenvalues; index_map = nothing, return_eigendecomposition = false)
     """
@@ -59,7 +64,7 @@ function shift_operator(coords, eigenvalues; index_map = nothing, return_eigende
 
     X = nonneg_lsq(transpose(transpose(eigenvalues).*coords[valid_prev,:]),
                     transpose(transpose(eigenvalues).*coords[indices_no_next,:]),
-                    alg = :nnls) #fnnls - for fast Non Neg Least Squares - less accurate
+                    alg = :nnls)
 
     X = X ./ sum(X, dims = 1) # should already be close to 1
 
@@ -153,7 +158,7 @@ function expectation_operator(coords, index_map, targets; func::Function = immed
     index_map : int array
         This is the index_map returned by the series_Gxy function. It indicates the index in the
         series for the (past, future) pair matching each coordinate entry. That index is that of
-        the present, the last value in the past series. If the series consist of several discontiguous
+        the present, the last value in the past series. If the series consists of several discontiguous
         blocks, the index refers to the valid entries in the series that would be made by concatenating
         these blocks (that series would have invalid entries at each time discontinuity, at nan values, etc).
         The targets parameter may have its own validity pattern, and one that differs for each heterogenous
@@ -211,7 +216,7 @@ function expectation_operator(coords, index_map, targets; func::Function = immed
     """
 
     if index_map === nothing
-        println("You must provide a valid index map")
+        @info("You must provide a valid index map")
     end
 
     targets_list = targets
@@ -522,4 +527,58 @@ function predict(npred, state_dist, shift_op, expect_op; return_dist = 0, bounds
     end
 
     return pred
+end
+
+function new_coords(Ks, Gs, coords; method = "nnls")
+    """
+    Compute a state distribution
+
+    Parameters
+    ----------
+    Ks : array of size (N, L)
+        These are the kernel similarity vectors between a new state estimate and reference states. Such vectors can be computed using the series_newKx for time series data and embedding that result with embed_Kx
+        L is the number of such vectors, one per column
+
+    Gs : array of size (N, N)
+        The Gram matrix between known states
+
+    coords : array of size (N, M)
+        diffusion map coordinates for each sample. These are returned by the spectral_basis function.
+
+    method : string, optional
+        What method to use for computing the state distribution. This parameter is subject to change. Values are
+            + 'nnls': (default) uses non-negative least squares to ensure that the new state estimate remains within the boundaries of existing states. This is similar to kernel moment matching, see the paper
+            + 'unbounded': unbounded estimate, equivalent to a Nyström extension, which is then normalized into a pseudo-distribution.
+
+    Returns
+    -------
+    state_dist : array of size (M, L)
+        The state distribution, represented as coefficients in the eigenbasis. The first entry of the state distribution is always be 1. In order to retreive a proper probability distribution, you can do q = basis @ state_dist. Note that, after evolution by the shift operator, the expression of the causal states as linear combinations of RKHS basis elements may induce that some entries of q are negative. q is both the distribution, and its expression as a linear combination on the RKHS samples.
+    """
+
+    if method == "unbounded"
+
+        Ω = copy(Ks)
+        ldiv!(factorize(Gs), Ω) # Gs \ Ks
+
+    else
+
+        # Note that the Non-Negative constraint is enough in this case,
+        # Since the solution sums to 1 with the diagonal entries in Gs
+        Ω = nonneg_lsq(Gs, Ks, alg = :nnls)
+    end
+
+    Ω = Ω ./ sum(Ω, dims = 1)
+    # q0 is specified in the original RKHS representation, for each sample.
+    # Turn it into an eigen space representation (scaled if coords are scaled)
+    nc = transpose(Ω) * coords
+    # Since q0 is normalized, and since all the first components of the coordinates are 1, the first entry of the state distribution should also be 1
+    if !isapprox(nc[:,1],ones(length(nc[:,1])))
+
+        @warn ("The resulting state distribution must be normalized to have 1 as its first entry, but this is not the case. Did you pass the correct coordinates?")
+    end
+    # ensure there are no numerical roundoff
+    nc = nc ./ nc[:,1]
+
+    return nc
 end

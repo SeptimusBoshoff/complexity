@@ -99,12 +99,6 @@ function series_Gxy(series, scale, npast, nfuture; decay=1, qcflags=nothing, loc
         localdiff_list = localdiff * ones(nseries)
     end
 
-    if length(localdiff) != 1
-        localdiff_list = localdiff
-    else
-        localdiff_list = localdiff * ones(nseries)
-    end
-
     if qcflags === nothing
 
         qcflags_list = [nothing for ser in series_list]
@@ -117,13 +111,14 @@ function series_Gxy(series, scale, npast, nfuture; decay=1, qcflags=nothing, loc
         end
     end
 
-    total_lx, total_ly = nothing, nothing
-
     index_map = compute_index_map_multiple_sources(series_list, npasts_list, nfutures_list, qcflags_list, take2skipX = take2skipX)
+
+    total_lx = nothing
+    total_ly = nothing
 
     for (ser, sca, npa, nfu, dec, ldiff) in zip(series_list, scales_list, npasts_list, nfutures_list, decays_list, localdiff_list)
 
-        lx, ly = series_xy_logk_indx(ser, sca, npa, nfu, dec, index_map, kernel_params_[1], kernel_params_[2], ldiff)
+        lx, ly = series_xy_logk_indx(ser, sca, npa, nfu, dec, index_map, kernel_params_, ldiff)
 
         if total_lx === nothing
 
@@ -237,7 +232,7 @@ function compute_index_map_single_source(series, npast, nfuture; skip_start = 0,
     # nfuture can be 0
     if nfuture < 0
 
-        println("nfuture must be a strictly positive integer")
+        @warn("nfuture must be a strictly positive integer")
     end
 
     if !isa(series, Dict) && !isa(series, Tuple)
@@ -406,17 +401,12 @@ end
 """
 Wrapper for the function sxy_logk
 """
-function series_xy_logk_indx(series, scale, npast, nfuture, decay, concat_valid_map, kernel_params_1, kernel_params_2, localdiff)
+function series_xy_logk_indx(series, scale, npast, nfuture, decay, concat_valid_map, kernel_params_, localdiff)
 
     if npast <= 1
         factor_r_past = 1
     else
         factor_r_past = exp(log(decay) / (npast - 1.0))
-    end
-    if nfuture <= 1
-        factor_r_future = 1
-    else
-        factor_r_future = exp(log(decay) / (nfuture - 1.0))
     end
 
     sum_r_past = 1
@@ -429,7 +419,16 @@ function series_xy_logk_indx(series, scale, npast, nfuture, decay, concat_valid_
     end
 
     # this factor weights the past sequence
-    sum_past_factor = kernel_params_1 / (sum_r_past * scale^kernel_params_2)
+    sum_past_factor = kernel_params_[1] / (sum_r_past * scale^kernel_params_[2])
+
+    #---------------------------------------------------------------------------------------
+
+    if nfuture <= 1
+        factor_r_future = 1
+    else
+        factor_r_future = exp(log(decay) / (nfuture - 1.0))
+    end
+
     sum_r_future = 1
     r = 1
 
@@ -440,7 +439,9 @@ function series_xy_logk_indx(series, scale, npast, nfuture, decay, concat_valid_
     end
 
     # this factor weights the future sequence
-    sum_future_factor = kernel_params_1 / (sum_r_future * scale^kernel_params_2)
+    sum_future_factor = kernel_params_[1] / (sum_r_future * scale^kernel_params_[2])
+
+    #---------------------------------------------------------------------------------------
 
     # The job done for each entry in the matrix
     # computes sum of sq diff for past (sx) and future (sy) sequences
@@ -474,7 +475,7 @@ function series_xy_logk_indx(series, scale, npast, nfuture, decay, concat_valid_
             ĵ = concat_valid_map[j]
 
             sx[i, j], sy[i, j] = sxy_logk(î, ĵ, series, npast, nfuture,
-                localdiff, kernel_params_2, factor_r_past, factor_r_future, sum_r_past,
+                localdiff, kernel_params_[2], factor_r_past, factor_r_future, sum_r_past,
                 sum_past_factor, sum_future_factor)
 
             #sx[j, i] = sumx # we only need the lower triangle
@@ -491,7 +492,7 @@ function series_xy_logk_indx(series, scale, npast, nfuture, decay, concat_valid_
             ĵ = concat_valid_map[j]
 
             sx[i, j], sy[i, j] = sxy_logk(î, ĵ, series, npast, nfuture,
-                localdiff, kernel_params_2, factor_r_past, factor_r_future, sum_r_past,
+                localdiff, kernel_params_[2], factor_r_past, factor_r_future, sum_r_past,
                 sum_past_factor, sum_future_factor)
 
             #sx[j, i] = sumx # we only need the lower triangle
@@ -628,7 +629,7 @@ function parallel_exp_lowtri!(mat, dims)
         M = N - 1
     end
 
-    invdims = 1 / dims # not sure why this is necessary
+    invdims = 1 / dims
 
     # outer loops can be parallelized - all have about the same duration
     Threads.@threads for k in (N+1)÷2:N-1
@@ -761,4 +762,202 @@ function embed_states(Gx, Gy; ϵ = 1e-8, normalize = true, return_embedder = fal
     end
 
     return Gs
+end
+
+function series_newKx(new_series, ref_series, ref_index_map, scale, npast; decay = 1, localdiff = 0, new_index_map = nothing, kernel_type="Gaussian")
+    """
+    Computes the log of kernel vector evaluations between each past sequence from the new series and the reference sequences.
+
+    This is similar to series_Gxy in that it computes a similarity matrix (or the log of it), but here the similarity is computed with respect to new data values, and only for Gx (past sequences)
+
+    The new_series_map parameter can be computed using compute_index_map, or set to None to be automatically computed. See series_Gxy and compute_index_map for other arguments/doc.
+
+    """
+
+    kernel_params_ = set_kernel(kernel_type = kernel_type)
+
+    if size(new_series[1], 1) == 1
+        new_series_list = [new_series]
+    else
+        new_series_list = new_series
+    end
+
+    if size(ref_series[1], 1) == 1
+        ref_series_list = [ref_series]
+    else
+        ref_series_list = ref_series
+    end
+
+    nseries = size(ref_series_list, 1) # the number of sources / sensors
+
+    if length(scale) != 1
+        scales_list = scale
+    else
+        scales_list = scale * ones(nseries)
+    end
+
+    if length(npast) != 1
+        npasts_list = npast
+    else
+        npasts_list = Int.(npast * ones(nseries))
+    end
+
+    if length(decay) != 1
+        decays_list = decay
+    else
+        decays_list = decay * ones(nseries)
+    end
+
+    if length(localdiff) != 1
+        localdiff_list = localdiff
+    else
+        localdiff_list = localdiff * ones(nseries)
+    end
+
+    qcflags_list = [nothing for ser in new_series_list]
+
+    if new_index_map === nothing
+        new_index_map = compute_index_map_multiple_sources(new_series_list, npasts_list, Int.(zeros(nseries)), qcflags_list)
+    end
+
+    total_lx = nothing
+
+    for (nser, rser, sca, npa, dec, ldiff) in zip(new_series_list, ref_series_list, scales_list, npasts_list, decays_list, localdiff_list)
+
+        lx = series_newx_logk(nser, new_index_map, rser, ref_index_map,
+        sca, npa, kernel_params_, decay = dec, localdiff = ldiff)
+
+        if total_lx === nothing
+            total_lx = lx
+        else
+            total_lx += lx
+        end
+    end
+
+    invdims = 1/nseries
+
+    total_lx = invdims*total_lx
+
+    return exp.(total_lx)
+end
+
+function series_newx_logk(new_series, new_index_map, ref_series, ref_index_map,
+    scale, npast, kernel_params_; decay = 1, localdiff = 0)
+
+    if npast <= 1
+        factor_r_past = 1
+    else
+        factor_r_past = exp(log(decay) / (npast - 1.0))
+    end
+
+    sum_r_past = 1
+    r = 1
+
+    for t in npast-2:-1:0
+
+        r *= factor_r_past
+        sum_r_past += r
+    end
+
+    # this factor weights the past sequence
+    sum_past_factor = kernel_params_[1] / (sum_r_past * scale^kernel_params_[2])
+
+    nr = length(ref_index_map)
+    ns = length(new_index_map)
+
+    sx = Array{Float64,2}(undef, nr, ns)
+
+    #for idx, i in enumerate(ref_series_map):
+    #  for jdx, j in enumerate(new_series_map):
+
+    Threads.@threads for i_rs in 0:nr*ns-1
+
+        i = (i_rs ÷ ns)
+        j = i_rs - (i * ns)
+
+        # from index of (past,future) pairs to index in data series
+
+        î = ref_index_map[i+1]
+        ĵ = new_index_map[j+1]
+
+        sx[i+1, j+1] = sx_logk(î, ĵ, new_series, ref_series, npast, factor_r_past, sum_r_past,
+         sum_past_factor, kernel_params_[2], localdiff)
+
+    end
+
+    return sx
+
+end
+
+function sx_logk(î, ĵ, new_series, ref_series, npast, factor_r_past, sum_r_past,
+    sum_past_factor, kernel_params_2, localdiff)
+
+    if localdiff == 1
+
+        # weighted average over each past series
+        # diff of these => weighted avg of diffs
+        r = 1
+        delta = zeros(size(ref_series, 2))
+
+        for t in 0:npast-1
+
+            d = ref_series[î-t] .- new_series[ĵ-t]
+            delta += d * r
+            r *= factor_r_past
+        end
+
+        delta /= sum_r_past
+
+    elseif localdiff == 2
+        # value of the "present"
+        delta = ref_series[î] - new_series[ĵ]
+    end
+
+    r = 1
+    sumx = 0
+
+    #= @show(new_series[ĵ-npast+1])
+    @show(ĵ-npast+1)
+    @show(ĵ)
+    adf =#
+
+    for t in 0:npast-1
+
+        d = ref_series[î-t] - new_series[ĵ-t]
+
+        if localdiff != 0
+            d = d - delta
+        end
+
+        ds = abs2(d)
+
+        if kernel_params_2 != 2
+            ds = ds^(0.5 * kernel_params_2)
+        end
+
+        sumx += ds * r
+        r *= factor_r_past
+
+    end
+
+    return sumx * sum_past_factor
+end
+
+function embed_Kx(Kx, Gx, embedder, ϵ = 1e-8)
+    """
+    Construct a similarity vector in state space, from a similarity vector in X space and using the embbeder returned by embed_states
+
+    Arguments:
+        Kx: a similarity vector in X space, such as returned by series_newKx.
+        Gx: a similarity matrix of pasts X.
+        embedder: The embedder returned by embed_states
+        eps: amount of regularization. See embed_states
+
+    Returns:
+        Ks: the similarity vector, in state space
+    """
+
+    omega = nonneg_lsq(Gx + ϵ*I, Kx, alg = :nnls)
+
+    return (embedder * omega)
 end

@@ -27,8 +27,12 @@ matrix', which it mostly is - but with extra steps.
     - If '0 < num_basis < 1', specifies a threshold below which eigenvalues are discarded.
 - `scaled::Bool`: Determines whether the right eigenvectors are scaled or returned as is.
 - `alpha::Float`: An optional normalization exponent between '0' and '1' for the
-  diffusion-map like algorithm. The dafault of '1' allows for the inference of geometry,
-  with minimal interference from the density.
+  diffusion-map like algorithm. The dafault of '1' is the Laplace-Beltrami approximation
+  where the Markov chain converges to Brownian motion, allowing for the inference of
+  geometry, with minimal interference from the density. In other words, the distribution of
+  the data is separated from the geometry of the underlying manifold, i.e. the geometry and
+  the statistics have been completely decoupled. In contrast, when alpha is set to '0' we
+  obtain the graph Laplacian.
 
 # Return Values
 - `eigenvalues::Vector{Float64}`: A vector whose size is dependent on 'num_basis'. Due to
@@ -42,10 +46,12 @@ matrix', which it mostly is - but with extra steps.
   can be considered to be a point in the diffusion space, a diffusion coordinate so to
   speak. The first coordinate of every point is normalised such that it is always 1 and can
   be discarded for purposes such as distance comparisons, manifold reconstruction,
-  visualisation, etc.
+  visualisation, etc. Together the (unscaled) right eigenvectors and left eigenvectors form
+ a bi-orthogonal basis such that "transpose(coords[:,x]) * basis[x,:] = 1", or equivalently
+ "basis * coords = I"
 
 """
-function spectral_basis(Gs; num_basis = nothing, scaled = true, alpha = 1)
+function spectral_basis(Gs; num_basis = nothing, scaled = true, α = 1.0)
 
     N = size(Gs, 1)
 
@@ -68,30 +74,32 @@ function spectral_basis(Gs; num_basis = nothing, scaled = true, alpha = 1)
         num_basis = N
     end
 
-    alpha = clamp(alpha, 0., 1.)
+    α = clamp(α, 0., 1.)
 
     mat = copy(Gs)
 
-    if alpha > 0
+    if α > 0
 
         q = vec(sum(mat, dims = 2))
 
-        if alpha != 1
+        if α != 1
 
-            q = q.^alpha
+            q = q.^α
         end
 
         q = (1) ./ q
 
         mat = mat .* q
-        mat = mat .* transpose(q) # used for left eigenvectors?
+        mat = mat .* transpose(q)
 
     end
 
     q = vec(sum(mat, dims = 2))
 
-    # using ArnoldiMethodTransformations for generalised eigen
-    decomp, history  = partialschur(Diagonal((1) ./ q)*mat, nev = num_basis,
+    P = Diagonal((1) ./ q)*mat # stochastic Markov matrix
+
+    # using ArnoldiMethodTransformations for generalised eigen, mat is symmetric, P is not
+    decomp, history  = partialschur(P, nev = num_basis,
     tol = 1e-6, restarts = 200, which = LM())
     eigval, eigvec = partialeigen(decomp)
 

@@ -6,7 +6,7 @@ println("...........o0o----ooo0§0ooo~~~  START  ~~~ooo0§0ooo----o0o...........
 
 num_basis = 20
 N = size(Gs, 1)
-alpha = 0.1
+alpha = 0.5
 
 mat = copy(Gs)
 
@@ -84,7 +84,7 @@ plot_X = plot([trace_X_2, trace_X_3, trace_X_4],
                     yaxis_title = "y,x [m]",
                     ),
                 )
-display(plot_X)
+#display(plot_X)
 
 trace = surface(z = eigvec_r[:,1:end], showscale = false)
 layout = Layout(title = "Eigenfunctions", autosize = true,
@@ -94,5 +94,35 @@ layout = Layout(title = "Eigenfunctions", autosize = true,
 
 println("...........o0o----ooo0§0ooo~~~   END   ~~~ooo0§0ooo----o0o...........\n")
 
+k = copy(Gs)
 
-transpose(eigvec_l[2,:])*(eigvec[:,2])
+q = vec(sum(k, dims = 1))
+
+qa = q.^alpha
+
+da = vec(sum(k ./ (qa*transpose(qa)), dims = 1))
+
+dainv = (1 ./ da)
+qainv = 1 ./ qa
+
+ka = k.*(qainv).* transpose(qainv)
+
+Pa = (ka .* dainv)
+
+Pa2 = k ./ (da*transpose(da))
+
+k[1,2] / (da[1]*da[2])
+
+Pa3 = k .* (qainv)
+Pa3 = Pa3 .* transpose(qainv)
+q = vec(sum(Pa3, dims = 1))
+qinv = 1 ./ q
+Pa3 = Diagonal(qinv)*Pa3
+
+#= q = vec(sum(Pa, dims = 1))
+
+Pa = Diagonal((1) ./ q)*Pa =#
+
+norm(P .- Pa)
+
+Pa2[1,1]/P[1,1]
