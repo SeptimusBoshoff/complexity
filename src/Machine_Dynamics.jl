@@ -5,7 +5,7 @@
     Original code in python converted to julia code by Septimus Boshoff
 =#
 
-function shift_operator(coords, eigenvalues; index_map = nothing, return_eigendecomposition = false)
+function shift_operator(coords; index_map = nothing, return_eigendecomposition = false, alg = :nnls)
     """
     Compute a shift operator for the dynamical system, assuming coords are the time series of causal states
     Handles NaN values and split / multi series with index maps
@@ -42,52 +42,45 @@ function shift_operator(coords, eigenvalues; index_map = nothing, return_eigende
     # To replace in formulas:
     valid_next = valid_prev .+ 1
 
-    # - shift_op is a stochastic transition matrix: rows sum to 1
     shift_op = zeros(size(coords, 2), size(coords, 2))
-    shift_op[1,1] = 1.0
-
-    # we want shift_op * transpose(coords[valid_prev,:]) = transpose(coords[valid_next,:])
-    # and some generalization outside valid_prev
-    # below are raw/naive options, they diverge and do not generalize much
-    # even when coords are replaced by coords*eigenvalues
-    # This is the fastest
-    # shift_op[2:end,:] = transpose(coords[valid_next, 2:end]) * pinv(transpose(coords[valid_prev,:]))
+    shift_op[1, 1] = 1.0
 
     # The idea now is to express the coordinates with no valid next values
-    # as a combination of known coordinates, so that the shift operator
-    # expresses coordinates only using the known / good examples
+    # as a combination of known coordinates
 
-    # Using inverses yields the least accurate results
+    # we want shift_op * transpose(coords[valid_prev,:]) = transpose(coords[valid_next,:])
 
-    # Using non-negative least squares instead works better, see the paper
+    if alg == :nnls
 
-    # weights for each entry with no successor
+        # Using non-negative least squares works better
 
-    X = nonneg_lsq(transpose(transpose(eigenvalues).*coords[valid_prev,:]),
-                    transpose(transpose(eigenvalues).*coords[indices_no_next,:]),
-                    alg = :nnls)
+        # nnls does not solve A*X = B, it solves A = inv(A)*A, B = inv(A)*B
+        X = nonneg_lsq(transpose(coords[valid_prev,:]),
+                        transpose(coords[indices_no_next,:]),
+                        alg = :nnls) # :nnls is most accurate
 
-    X = X ./ sum(X, dims = 1) # should already be close to 1
+        X = X ./ sum(X, dims = 1) # should already be close to 1
 
-    T = diagm(-1 => ones(size(coords, 1)-1))
+        T = diagm(-1 => ones(size(coords, 1)-1))
 
-    # put that back into T. Process column by column, due to indexing scheme
-    # that would make the matrix read-only
+        # put that back into T. Process column by column, due to indexing scheme
 
-    for (ic, c) in enumerate(indices_no_next)
+        for (ic, c) in enumerate(indices_no_next)
 
-        T[:, c] .= 0
-        T[valid_next, c] = X[:,ic]
+            T[:, c] .= 0
+            T[valid_next, c] = X[:,ic]
+        end
+
+        shift_op[2:end,:] = transpose(coords \ (transpose(T)*coords[:, 2:end]))
+
+    elseif alg == :pinv
+
+        # This is slower
+        # To test: Using inverses yields the least accurate results.
+
+        shift_op[2:end,:] = transpose(coords[valid_next, 2:end]) * pinv(transpose(coords[valid_prev,:]))
+
     end
-
-    shift_op[2:end,:] = transpose(coords \ (transpose(T)*coords[:, 2:end]))
-
-    # This may be another option - gives similar results
-    #= b = (transpose(T)*coords[:, 2:end])
-    ldiv!(factorize(coords), b)
-    rows_to_keep = b[:,1:end] .!= 0
-    b = b[findall(rows_to_keep[:,1]),:]
-    shift_op[2:end,:] = transpose(b) =#
 
     # Now ensure the operator power does not blow up
     # Eigenvalues should have modulus less than 1...
@@ -95,7 +88,7 @@ function shift_operator(coords, eigenvalues; index_map = nothing, return_eigende
     #right_eigvec = reduce(hcat, right_eigvec)
     eigval, right_eigvec = eigen(shift_op)
 
-    # This is to check that the eigendecomposition isn't bullshit
+    # This is to check that the eigendecomposition isn't incorrect
     #= Λ = Diagonal(eigval)
     println(shift_op * right_eigvec ≈ right_eigvec * Λ) # should return true
     println(left_eigvec * shift_op ≈  Λ * left_eigvec) # should return true =#
@@ -118,7 +111,6 @@ function shift_operator(coords, eigenvalues; index_map = nothing, return_eigende
         end
 
         # reconstruct best approximation of the shift operator
-        # faster formula using solve adapted from
 
         Λ = Diagonal(eigval)
         shift_op = real.((right_eigvec * Λ) * pinv(right_eigvec))
@@ -146,7 +138,7 @@ function immediate_future(data, indices)
     return data[indices .+ 1, :]
 end
 
-function expectation_operator(coords, index_map, targets; func::Function = immediate_future)
+function expectation_operator(coords, index_map, targets; func = immediate_future)
     """
     Builds the expectation operator, mapping a state distribution expressed in the eigenbasis, into numerical values, expressed in the original series units.
 
@@ -216,36 +208,21 @@ function expectation_operator(coords, index_map, targets; func::Function = immed
 
     """
 
-    if index_map === nothing
-        @info("You must provide a valid index map")
-    end
-
-    targets_list = targets
-
-    if (isa(func, Dict) || isa(func, Tuple))
+    if func isa Vector
         f_list = func
     else
-        f_list = Array{Function, 1}(undef, length(targets_list))
+        f_list = Array{Function, 1}(undef, length(targets))
         f_list = fill!(f_list, func)
     end
 
-    eoplist = Vector{Matrix{Float64}}(undef, length(targets_list))
+    eoplist = Vector{Matrix{Float64}}(undef, length(targets))
 
     rtol = sqrt(eps(real(float(one(eltype(transpose(coords)))))))
     sci = pinv(transpose(coords), rtol = rtol)
 
     e_cnt = 1
 
-    for (tar, fun) in zip(targets_list, f_list)
-
-        if isa(tar, Dict) || isa(tar, Tuple)
-            println("This functionality does not exist yet")
-            # Something like tar = reduce(hcat, tar)
-        end
-
-        if ndims(tar) == 1
-            tar = reshape(tar, :, 1)
-        end
+    for (tar, fun) in zip(targets, f_list)
 
         fvalues = fun(tar, index_map)
 
@@ -255,14 +232,7 @@ function expectation_operator(coords, index_map, targets; func::Function = immed
         e_cnt += 1
     end
 
-    if isa(targets, Dict) || isa(targets, Tuple)
-
-        return eoplist
-
-    else
-
-        return eoplist
-    end
+    return eoplist
 end
 
 function predict(npred, state_dist, shift_op, expect_op; return_dist = 0, bounds = nothing, knn_convexity = nothing, coords = nothing, knndim = nothing, extent = nothing)
@@ -520,11 +490,11 @@ function predict(npred, state_dist, shift_op, expect_op; return_dist = 0, bounds
 
     if return_dist == 1
 
-        return pred, state_dist
+        return pred, transpose(state_dist)
 
     elseif return_dist == 2
 
-        return pred, all_state_dists
+        return pred, transpose(all_state_dists)
     end
 
     return pred
@@ -547,7 +517,7 @@ Compute the best matching state distributions.
   diffusion space. These are returned by the spectral_basis function.
 
 # Keyword Arguments
-- `method::String`: What method to use for computing the state distribution.
+- `alg::Symbol`: What method to use for computing the state distribution.
     - "nnls" -> uses non-negative least squares to ensure that the new state estimate
       remains within the boundaries of existing states.
     - "unbounded" -> unbounded estimate, equivalent to a Nyström extension, which is then
@@ -563,9 +533,9 @@ Compute the best matching state distributions.
   on the RKHS samples.
 
 """
-function new_coords(Ks, Gs, coords; method = "nnls")
+function new_coords(Ks, Gs, coords; alg = :nnls)
 
-    if method == "unbounded"
+    if alg == :unbounded
 
         Ω = copy(Ks)
         ldiv!(bunchkaufman(Gs), Ω) # Gs \ Ks

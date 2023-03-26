@@ -701,17 +701,18 @@ using the conditional mean embedding.
 """
 function embed_states(Gx, Gy; ϵ = 1e-8, normalize = true, return_embedder = false)
 
-    #Ω = (Gx + ϵ*I) \ Gx
-    #Ω = (H*Gˣ + N*ϵ*I) \ (H*Gx)
-
     centre_embedder = false # under development
 
     if !centre_embedder
+
+        #Ω = (Gx + ϵ*I) \ Gx
 
         Ω = copy(Gx) # this is our weight matrix
         ldiv!(cholesky(Gx + ϵ*I), Ω)
 
     else
+
+        #Ω = (H*Gˣ + N*ϵ*I) \ (H*Gx)
 
         N = size(Gx, 1)
         H = I - (1/N)*ones(N)*transpose(ones(N)) # centring matrix

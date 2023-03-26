@@ -108,7 +108,7 @@ scale = [maximum(data[1])-minimum(data[1]); maximum(data[2])-minimum(data[2])]
     # indices in the index map. Data series formed by multiple contiguous time
     # blocks are supported, as well as the handling of NaN values
     println("\n4. Forward Shift Operator")
-    shift_op = shift_operator(coords, eigenvalues, index_map = index_map)
+    shift_op = shift_operator(coords, index_map = index_map)
 
     # This is the expectation operator, using its default function that predicts
     # the first entry in the future sequence from the current state distribution.
@@ -185,12 +185,12 @@ plot_x_t = plot([trace_x, trace_y, trace_x̂, trace_ŷ],
 display(plot_x_t)
 
 N₁ = length(coords[:,2])
-N₂ = length(dist[2,:])
+N₂ = length(dist[:, 2])
 nans = Array{Float64, 1}(undef, N₁ - N₂)
 nans = fill!(nans, NaN)
-Φ₁ = vec([nans; dist[2, :]])
-Φ₂ = vec([nans; dist[3, :]])
-Φ₃ = vec([nans; dist[4, :]])
+Φ₁ = vec([nans; dist[:, 2]])
+Φ₂ = vec([nans; dist[:, 3]])
+Φ₃ = vec([nans; dist[:, 4]])
 
 df_Ψ_Φ = DataFrame(Ψ₁ = coords[:,2], Ψ₂ = coords[:,3], Ψ₃ = coords[:,4], Φ₁ = Φ₁, Φ₂ = Φ₂, Φ₃ = Φ₃)
 

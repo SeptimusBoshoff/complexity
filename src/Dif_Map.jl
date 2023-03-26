@@ -24,14 +24,15 @@ matrix', which it mostly is - but with extra steps.
 
 # Keyword Arguments
 - `num_basis::Int or Float`:
-    - If 'nothing' then 'N/2' eigenvalues are retained. A somewhat arbitrary and should be
-      verified that the value is adequate.
+    - If 'nothing' then 'N/2' eigenvalues are retained. A somewhat arbitrary number and
+      should be verified that the value is adequate.
     - If '<= 0', then all eigenvalues are retained. This is generally ill advised. Due to
       previous steps (embed_states) a spurious eigenvalues may be artificially created,
       which impacts the results of future steps (shift_operator).
-    - If '<= 1', the specifies the number of basis components.
+    - If '>= 1', the specifies the number of basis components.
     - If '0 < num_basis < 1', specifies a threshold below which eigenvalues are discarded.
-- `scaled::Bool`: Determines whether the right eigenvectors are scaled or returned as is.
+- `scaled::Bool`: Determines whether the right eigenvectors are scaled, which means that
+  every row vector is a coordinate in diffusion space.
 - `alpha::Float`: An optional normalization exponent between '0' and '1' for the
   diffusion-map like algorithm. The dafault of '1' is the Laplace-Beltrami approximation
   where the Markov chain converges to Brownian motion, allowing for the inference of
@@ -42,19 +43,21 @@ matrix', which it mostly is - but with extra steps.
 
 # Return Values
 - `eigenvalues::Vector{Float64}`: A vector whose size is dependent on 'num_basis'. Due to
-  normalisation the first eigenvalue is always '1'. All other eigenvalues are listed in
+  normalisation, and the fact that we are dealing with stochastic Markov transition
+  matrices, the first eigenvalue is always '1'. All other eigenvalues are listed in
   decending order and should be positive.
 - `basis::Array{Float64, 2}`: A 'M x N' matrix where every row corresponds to a basis, a
   left eigenvector. The first row corresponds to the stationary distribution and is
   normalized to sum to '1'. All other rows should sum up to '0'.
 - `coords::Array{Float64, 2}`: A 'N x M' matrix where every column is either a right
-  eigenvector or a right eigenvector scaled by its corresponding eigenvlaue. Every vector
-  can be considered to be a point in the diffusion space, a diffusion coordinate so to
-  speak. The first coordinate of every point is normalised such that it is always 1 and can
-  be discarded for purposes such as distance comparisons, manifold reconstruction,
-  visualisation, etc. Together the (unscaled) right eigenvectors and left eigenvectors form
- a bi-orthogonal basis such that "transpose(coords[:,x]) * basis[x,:] = 1", or equivalently
- "basis * coords = I"
+  eigenvector or a right eigenvector scaled by its corresponding eigenvalue. If scaled, then
+  every row vector (which are not eigenvectors) can be considered to be a point in the
+  diffusion space, a diffusion coordinate so to speak. The first coordinate of every point
+  is normalised such that it is always 1, as it ideally should be for a stochastic Markov
+ transition matrix, and can be discarded for purposes such as distance comparisons, manifold
+ reconstruction, visualisation, etc. Together the (unscaled) right eigenvectors and left
+ eigenvectors form a bi-orthogonal basis such that "transpose(coords[:,xᵢ]) * basis[xᵢ,:] =
+ 1", or equivalently "basis * coords = I"
 
 """
 function spectral_basis(Gs; num_basis = nothing, scaled = true, α = 1.0)
@@ -82,11 +85,11 @@ function spectral_basis(Gs; num_basis = nothing, scaled = true, α = 1.0)
 
     α = clamp(α, 0., 1.)
 
-    mat = copy(Gs)
+    Gs_c = copy(Gs) # we don't want to overwrite the similarity matrix
 
     if α > 0
 
-        q = vec(sum(mat, dims = 2))
+        q = vec(sum(Gs_c, dims = 2))
 
         if α != 1
 
@@ -95,14 +98,14 @@ function spectral_basis(Gs; num_basis = nothing, scaled = true, α = 1.0)
 
         q = (1) ./ q
 
-        mat = mat .* q
-        mat = mat .* transpose(q)
+        Gs_c = Gs_c .* q
+        Gs_c = Gs_c .* transpose(q)
 
     end
 
-    q = vec(sum(mat, dims = 2))
+    q = vec(sum(Gs_c, dims = 2))
 
-    P = Diagonal((1) ./ q)*mat # stochastic Markov matrix
+    P = Diagonal((1) ./ q)*Gs_c # stochastic Markov matrix
 
     # using ArnoldiMethodTransformations for generalised eigen, mat is symmetric, P is not
     decomp, history  = partialschur(P, nev = num_basis,
@@ -134,20 +137,20 @@ function spectral_basis(Gs; num_basis = nothing, scaled = true, α = 1.0)
 
         @warn(history)
 
-        check = maximum(vec(sum(Diagonal((1) ./ q)*mat, dims = 1))) # should be close to 1
+        check = maximum(vec(sum(Diagonal((1) ./ q)*Gs_c, dims = 1))) # should be close to 1
     end
 
-    if (norm(mat * eigvec_r - Diagonal(q)*eigvec_r * Diagonal(eigval)) > 1e-6 ||
-        norm(eigvec_l*mat - Diagonal(eigval)*eigvec_l*Diagonal(q)) > 1e-6 ||
+    if (norm(Gs_c * eigvec_r - Diagonal(q)*eigvec_r * Diagonal(eigval)) > 1e-6 ||
+        norm(eigvec_l*Gs_c - Diagonal(eigval)*eigvec_l*Diagonal(q)) > 1e-6 ||
         maximum(abs.(sum(eigvec_l[2:end, :], dims = 2))) > 4e-4)
 
         @warn("The eigenvectors weren't correctly computed.")
 
-        @show norm(mat * eigvec_r - Diagonal(q)*eigvec_r * Diagonal(eigval))
-        #@show norm(Diagonal((1) ./ q)*mat * eigvec_r - eigvec_r * Diagonal(eigval))
+        @show norm(Gs_c * eigvec_r - Diagonal(q)*eigvec_r * Diagonal(eigval))
+        #@show norm(Diagonal((1) ./ q)*Gs_c * eigvec_r - eigvec_r * Diagonal(eigval))
 
-        @show norm(eigvec_l*mat - Diagonal(eigval)*eigvec_l*Diagonal(q))
-        #@show norm(eigvec_l*Diagonal((1) ./ q)*mat - Diagonal(eigval)*eigvec_l)
+        @show norm(eigvec_l*Gs_c - Diagonal(eigval)*eigvec_l*Diagonal(q))
+        #@show norm(eigvec_l*Diagonal((1) ./ q)*Gs_c - Diagonal(eigval)*eigvec_l)
 
         @show maximum(abs.(sum(eigvec_l[2:end, :], dims = 2)))
 

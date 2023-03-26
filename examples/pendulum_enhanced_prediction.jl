@@ -89,6 +89,8 @@ data_train = [vec(x_train), vec(y_train)]
 scale = [maximum(data_train[1]) - minimum(data_train[1]);
         maximum(data_train[2]) - minimum(data_train[2])]
 
+scale = 1
+
 # ******************************************************************************************
 # Validation
 
@@ -110,59 +112,68 @@ N = length(data_train[1])# number of samples
 # ******************************************************************************************
 # Training
 
+println("\nA. Training")
 @time begin
 
-    println("\n1. Generating gram matrices")
-    Gx, Gy, index_map = series_Gxy(data_train[1], scale, npast, nfuture)
+    @time begin
+        println("\n1. Generating gram matrices")
+        Gx, Gy, index_map = series_Gxy(data_train, scale, npast, nfuture)
+    end
 
-    # Compute the state similarity matrix.
-    # Embedding to get the similarity matrix between conditional distributions
-    println("\n2. Computing Gs")
-    Gs, embedder = embed_states(Gx, Gy, return_embedder = true)
+    @time begin
+        # Compute the state similarity matrix.
+        # Embedding to get the similarity matrix between conditional distributions
+        println("\n2. Computing Gs")
+        Gs, embedder = embed_states(Gx, Gy, return_embedder = true)
+    end
 
-    # Compute a spectral basis for representing the causal states.
-    # Find a reduced dimension embedding and extract the significant coordinates"
-    println("\n3. Projection")
-    eigenvalues, basis, coords_train = spectral_basis(Gs, num_basis = 100)
+    @time begin
+        # Compute a spectral basis for representing the causal states.
+        # Find a reduced dimension embedding and extract the significant coordinates"
+        println("\n3. Projection")
+        eigenvalues, basis, coords_train = spectral_basis(Gs, num_basis = 100)
+    end
 
-    # This is the forward operator in state space. It is built from consecutive
-    # indices in the index map. Data series formed by multiple contiguous time
-    # blocks are supported, as well as the handling of NaN values
-    println("\n4. Forward Shift Operator")
-    shift_op = shift_operator(coords_train, eigenvalues, index_map = index_map)
+    @time begin
+        # This is the forward operator in state space. It is built from consecutive
+        # indices in the index map. Data series formed by multiple contiguous time
+        # blocks are supported, as well as the handling of NaN values
+        println("\n4. Forward Shift Operator")
+        shift_op = shift_operator(coords_train)
+    end
 
-    # This is the expectation operator, using its default function that predicts
-    # the first entry in the future sequence from the current state distribution.
-    # You can specify other functions, see the documentation
-    println("\n5. Expectation Operator")
-    expect_op = expectation_operator(coords_train, index_map, data_train)
+    @time begin
+        # This is the expectation operator, using its default function that predicts
+        # the first entry in the future sequence from the current state distribution.
+        # You can specify other functions, see the documentation
+        println("\n5. Expectation Operator")
+        expect_op = expectation_operator(coords_train, index_map, data_train)
+    end
 
 end
 
 # ******************************************************************************************
 # Validation
 
+println("\nB. Validation")
 @time begin
 
-    println("\n6. Prediction")
-    # Build an initial state distribution for making predictions. This uses the
-    # very last data, which has no "future" in the observation series, and this
-    # is precisely what we want to predict.
+    println("6. Prediction")
 
     npast_val = 200
     ic = [data_val[1][1:npast_val], data_val[2][1:npast_val]] # initial condition
 
     # step 1. Build a kernel similarity vector with sample data
-    Kx = series_newKx(ic, data_train[1], index_map, scale, npast_val)
+    Kx = series_newKx(ic, data_train, index_map, scale, npast_val)
     # step 2. Embed to get similarity vector in state space
     Ks = embed_Kx(Kx, Gx, embedder)
     # step 3. Build a probability distribution over states.
-    coords_val = new_coords(Ks, Gs, coords_train)
+    coords_ic = new_coords(Ks, Gs, coords_train)
 
-    pred_hor = N - npast_val# prediction horizon
+    pred_hor = N - npast_val # prediction horizon
 
-    pred, dist = predict(pred_hor, coords_val[1, :], shift_op, expect_op, return_dist = 2)
-    final_dist = dist[:, end]
+    pred, coords_val = predict(pred_hor, coords_ic[1, :], shift_op, expect_op, return_dist = 2)
+    final_dist = coords_val[:, end]
 
 end
 
@@ -199,5 +210,35 @@ plot_x_t = plot([trace_x, trace_y,
                     ),
                 )
 display(plot_x_t)
+
+Ψ₁ = vec([coords_train[:,2]; nans[1:end]])
+Ψ₂ = vec([coords_train[:,3]; nans[1:end]])
+#Φ₁ = coords_ic[:,2]
+#Φ₂ = coords_ic[:,3]
+γ₁ = vec([coords_val[:,2]; nans[1]])
+γ₂ = vec([coords_val[:,3]; nans[1]])
+
+RSS = DataFrame(Ψ₁ = Ψ₁,
+                Ψ₂ = Ψ₂,
+                #Φ₁ = Φ₁,
+                #Φ₂ = Φ₂,
+                γ₁ = γ₁,
+                γ₂ = γ₂)
+
+trace_Ψ = scatter(RSS, x = :Ψ₁, y = :Ψ₂, name = "train")
+trace_Φ = scatter(RSS, x = :Φ₁, y = :Φ₂, name = "ic")
+trace_γ = scatter(RSS, x = :γ₁, y = :γ₂, name = "val")
+
+plot_RSS = plot([trace_Ψ, trace_γ],
+                Layout(
+                    title = attr(
+                        text = "Reconstructed State Space",
+                    ),
+                    title_x = 0.5,
+                    xaxis_title = "Ψ₁",
+                    yaxis_title = "Ψ₂",),
+                )
+
+display(plot_RSS)
 
 println("...........o0o----ooo0§0ooo~~~   END   ~~~ooo0§0ooo----o0o...........\n")

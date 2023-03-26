@@ -64,47 +64,59 @@ scale = sum(true_pk_vals)/length(true_pk_vals) - sum(true_valy_vals)/length(true
 
 @time begin
 
-    #= 1. Generating gram matrices =#
-    println("\n1. Generating gram matrices")
-    Gx, Gy, index_map = series_Gxy(data, scale, npast, nfuture)
+    @time begin
+        #= 1. Generating gram matrices =#
+        println("\n1. Generating gram matrices")
+        Gx, Gy, index_map = series_Gxy(data, scale, npast, nfuture)
+    end
 
-    #=2. Computing Gs
-        Compute the state similarity matrix.
-        Embedding to get the similarity matrix between conditional distributions
-    =#
-    println("\n2. Computing Gs")
-    Gs = embed_states(Gx, Gy)
+    @time begin
+        #=2. Computing Gs
+            Compute the state similarity matrix.
+            Embedding to get the similarity matrix between conditional distributions
+        =#
+        println("\n2. Computing Gs")
+        Gs = embed_states(Gx, Gy)
+    end
 
-    #= 3. Projection1
-        Compute a spectral basis for representing the causal states.
-        Find a reduced dimension embedding and extract the significant coordinates
-    =#
-    println("\n3. Projection")
-    eigenvalues, basis, coords = spectral_basis(Gs, num_basis = 30)
+    @time begin
+        #= 3. Projection
+            Compute a spectral basis for representing the causal states.
+            Find a reduced dimension embedding and extract the significant coordinates
+        =#
+        println("\n3. Projection")
+        eigenvalues, basis, coords = spectral_basis(Gs, num_basis = 30)
+    end
 
-    #= 4. Forward Shift Operator
-        This is the forward operator in state space. It is built from consecutive
-        indices in the index map. Data series formed by multiple contiguous time
-        blocks are supported, as well as the handling of NaN values
-    =#
-    println("\n4. Forward Shift Operator")
-    shift_op = shift_operator(coords, eigenvalues, index_map = index_map)
+    @time begin
+        #= 4. Forward Shift Operator
+            This is the forward operator in state space. It is built from consecutive
+            indices in the index map. Data series formed by multiple contiguous time
+            blocks are supported, as well as the handling of NaN values
+        =#
+        println("\n4. Forward Shift Operator")
+        shift_op = shift_operator(coords, index_map = index_map, alg = :nnls)
+    end
 
-    #= 5. Expectation Operator
-        This is the expectation operator, using its default function that predicts
-        the first entry in the future sequence from the current state distribution.
-        You can specify other functions, see the documentation
-    =#
-    println("\n5. Expectation Operator")
-    expect_op = expectation_operator(coords, index_map, [data])
+    @time begin
+        #= 5. Expectation Operator
+            This is the expectation operator, using its default function that predicts
+            the first entry in the future sequence from the current state distribution.
+            You can specify other functions, see the documentation
+        =#
+        println("\n5. Expectation Operator")
+        expect_op = expectation_operator(coords, index_map, [data])
+    end
 
-    #= 6. Prediction
-        Start from the last known point (represented by its coordinates) and
-        evolve the state for nfuture+1 points.
-    =#
-    println("\n6. Prediction")
-    pred, dist = predict(2*N - window_size + nfuture, coords[1, :], shift_op, expect_op,
-    return_dist = 2, knn_convexity = 5, knndim = 5, coords = coords, extent = 0.05)
+    @time begin
+        #= 6. Prediction
+            Start from the last known point (represented by its coordinates) and
+            evolve the state for nfuture+1 points.
+        =#
+        println("\n6. Prediction")
+        pred, dist = predict(2*N - window_size + nfuture, coords[1, :], shift_op, expect_op,
+        return_dist = 2, knn_convexity = 5, knndim = 5, coords = coords, extent = 0.05)
+    end
 end
 
 #-------------------------------------------------------------------------------
@@ -148,9 +160,9 @@ plot_sun_t = plot([trace_sunspots, trace_predictions],
 
 display(plot_sun_t)
 
-Φ₁ = dist[2, :]
-Φ₂ = dist[3, :]
-Φ₃ = dist[4, :]
+Φ₁ = dist[:, 2]
+Φ₂ = dist[:, 3]
+Φ₃ = dist[:, 4]
 
 df_Ψ_Φ = DataFrame(Ψ₁ = [coords[:,2]; nans_c], Ψ₂ = [coords[:,3]; nans_c], Ψ₃ = [coords[:,4]; nans_c], Φ₁ = Φ₁, Φ₂ = Φ₂, Φ₃ = Φ₃)
 
