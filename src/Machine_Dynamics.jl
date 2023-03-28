@@ -5,20 +5,33 @@
     Original code in python converted to julia code by Septimus Boshoff
 =#
 
-function shift_operator(coords; index_map = nothing, return_eigendecomposition = false, alg = :nnls)
-    """
-    Compute a shift operator for the dynamical system, assuming coords are the time series of causal states
-    Handles NaN values and split / multi series with index maps
+"""
+    shift_op, (eigval, eigvec_l, eigvec_r) = shift_operator(coords; index_map = nothing, return_eigendecomposition = false, alg = :nnls, coord_eigenvals = nothing)
 
-    Arguments:
-        coords : the coordinates of the causal states
-        index_map : see series_Gxy
-        return_eigendecomposition : whether to return the eigenvalues and eigenvectors of the shift operator. Default is False
+# Description
+Computes a discrete shift operator, similar to the Koopman operator, for the dynamical
+system typically defined on a diffusion state space.
 
-    Returns:
-        The forward operator for state distributions, represented in the eigenbasis.
-        if return_eigendecomposition is True, also return the eigenvalues and left, right eigenvectors
-    """
+# Arguments
+- `coords::Array{Float64, 2}`: A 'D x N' matrix of coordinates, where every column defines a
+  point in the state space.
+
+# Keyword Arguments
+- `index_map::Array{Int, 1}`: The indices of the valid (not NaN) and contiguous
+  (past,future) pairs.
+- `return_eigendecomp::Bool`: If true the the function returns the eigendecomposition of the
+  shift operator.
+- `alg::Symbol`: The algorithm. TODO
+
+# Return Values
+- `shift_op::Matrix{Float64}`: A 'D x D' matrix which defines the forward operator for coordinates
+  distributions, represented in the eigenbasis. if return_eigendecomposition is True, also
+  return the eigenvalues and left, right eigenvectors
+- `eigval::Vector{Float64}`: TODO
+- `eigvec_l::Matrix{Float64}`: TODO
+- `eigvec_r::Matrix{Float64}`: TODO
+"""
+function shift_operator(coords; index_map = nothing, return_eigendecomp = false, alg = :nnls, hankel_rank = 10, havok_dims = size(coords, 1))
 
     # TODO: generator, meaning the log in eigen decomposition form
     # This would allow to compute powers more efficiently
@@ -27,22 +40,25 @@ function shift_operator(coords; index_map = nothing, return_eigendecomposition =
     # This definition is similar to that of the kernel Koopman operator in RKHS,
     # but done here in diffusion map coordinates space
 
+    dims = size(coords, 1)
+    num_coords = size(coords, 2)
+
     if index_map === nothing
 
-        valid_prev = range(1, size(coords, 1) - 1)
-        indices_no_next = [size(coords, 1)]
+        valid_prev = range(1, num_coords - 1)
+        indices_no_next = [num_coords]
     else
 
         # build reverse operators
-        valid_prev = deleteat!(collect(range(1, size(coords, 1) - 1)), findall(diff(index_map) .!= 1))
+        valid_prev = deleteat!(collect(range(1, num_coords - 1)), findall(diff(index_map) .!= 1))
         # also known as gaplocs, plus the latest state
-        indices_no_next = setdiff(range(1, size(coords, 1)), valid_prev)
+        indices_no_next = setdiff(range(1, num_coords), valid_prev)
     end
 
     # To replace in formulas:
     valid_next = valid_prev .+ 1
 
-    shift_op = zeros(size(coords, 2), size(coords, 2))
+    shift_op = zeros(dims, dims)
     shift_op[1, 1] = 1.0
 
     # The idea now is to express the coordinates with no valid next values
@@ -55,43 +71,121 @@ function shift_operator(coords; index_map = nothing, return_eigendecomposition =
         # Using non-negative least squares works better
 
         # nnls does not solve A*X = B, it solves A = inv(A)*A, B = inv(A)*B
-        X = nonneg_lsq(transpose(coords[valid_prev,:]),
-                        transpose(coords[indices_no_next,:]),
-                        alg = :nnls) # :nnls is most accurate
+        X = nonneg_lsq(coords[:, valid_prev], coords[:, indices_no_next], alg = :nnls)
+        # :nnls is most accurate
 
         X = X ./ sum(X, dims = 1) # should already be close to 1
 
-        T = diagm(-1 => ones(size(coords, 1)-1))
+        T = diagm(-1 => ones(num_coords - 1))
 
         # put that back into T. Process column by column, due to indexing scheme
 
         for (ic, c) in enumerate(indices_no_next)
 
-            T[:, c] .= 0
             T[valid_next, c] = X[:,ic]
         end
 
-        shift_op[2:end,:] = transpose(coords \ (transpose(T)*coords[:, 2:end]))
+        #shift_op[2:end,:] = transpose(transpose(coords) \ transpose(coords[2:end, :]*T))
+        shift_op[2:end,:] = (coords[2:end, :]*T)*pinv(coords)
 
     elseif alg == :pinv
 
         # This is slower
         # To test: Using inverses yields the least accurate results.
 
-        shift_op[2:end,:] = transpose(coords[valid_next, 2:end]) * pinv(transpose(coords[valid_prev,:]))
+        shift_op[2:end,:] = (coords[2:end, valid_next]) * pinv(coords[:, valid_prev])
+
+    elseif alg == :dmd
+
+        # Step 1: Compute the singular value decomposition of coords
+
+        U, S, V = svd(coords[:, valid_prev])
+        #coords[:, valid_prev] = U*diagm(S)*V'
+
+        # Step 2: Truncate matrices
+        # Find r to capture 90% of the energy
+        cdS = cumsum(S)./sum(S)
+        mean = sum(cdS)/length(S)
+        r = findfirst(cdS .>= mean) # truncation rank
+
+        if r === nothing r = length(S) end
+
+        Us = U[:, 1:r]
+        Ss = S[1:r]
+        Vs = V[:, 1:r]
+
+        # Step 3: Project A onto the POD modes of U
+
+        dmd_operator = (coords[:, valid_next])*Vs*inv(Diagonal(Ss))
+
+        shift_op = (Us')*dmd_operator
+
+        #@show (coords[:, valid_prev]) ≈ U*diagm(S)*V'
+
+    elseif alg == :havok
+
+        havok_dims = dims - 1 # another opportunity for dim reductions
+
+        wind = (num_coords - hankel_rank + 1)
+
+        H = Array{Float64, 2}(undef, havok_dims*hankel_rank, wind) # Hankel matrix
+
+        # Idea: if using diffusion map coordinates, let's throw away the first coordinate
+        # cause its always 1
+
+        j = 1
+        #Threads.@threads
+        for i in 1:hankel_rank
+
+            H[j:j + havok_dims - 1, :] = coords[1:havok_dims, i:wind + i - 1]
+
+            j = j + havok_dims
+
+        end
+
+        # Step 1: Compute the singular value decomposition of coords
+
+        U, S, V = svd(H)
+        #coords[:, valid_prev] = U*diagm(S)*V'
+
+        # Step 2: Truncate matrices
+        r = length(S) # truncation rank
+
+        Us = U[:, 1:r]
+        Ss = S[1:r]
+        Vs = V[:, 1:r]
+
+        # Step 3: Project A onto the POD modes of U
+
+        dmd_operator = (coords[:, valid_next])*Vs*inv(Diagonal(Ss))
+
+        shift_op = (Us')*dmd_operator
+
+        #@show (coords[:, valid_prev]) ≈ U*diagm(S)*V'
 
     end
 
-    # Now ensure the operator power does not blow up
-    # Eigenvalues should have modulus less than 1...
-    #eigval, right_eigvec, info = eigsolve(shift_op) # for KrylovKit
-    #right_eigvec = reduce(hcat, right_eigvec)
-    eigval, right_eigvec = eigen(shift_op)
+    eigval, eigvec_r = eigen(shift_op)
+
+    if alg == :dmd
+
+        # Step 4: The DMD modes are eigenvectors of the high-dimensional A matrix. The DMD
+        # eigenvalues are also the eigenvalues of the full shift operator.
+
+        eigvec_r = dmd_operator*eigvec_r
+
+        shift_op = real.(eigvec_r*Diagonal(eigval)*pinv(eigvec_r))
+
+    end
 
     # This is to check that the eigendecomposition isn't incorrect
     #= Λ = Diagonal(eigval)
-    println(shift_op * right_eigvec ≈ right_eigvec * Λ) # should return true
-    println(left_eigvec * shift_op ≈  Λ * left_eigvec) # should return true =#
+    eigvec_l = inv(eigvec_r)
+    println(shift_op * eigvec_r ≈ eigvec_r * Λ) # should return true
+    println(eigvec_l * shift_op ≈  Λ * eigvec_l) # should return true =#
+
+    # Now ensure the operator power does not blow up
+    # Eigenvalues should have modulus less than 1...
 
     if maximum(abs.(eigval)) > 1
 
@@ -113,19 +207,18 @@ function shift_operator(coords; index_map = nothing, return_eigendecomposition =
         # reconstruct best approximation of the shift operator
 
         Λ = Diagonal(eigval)
-        shift_op = real.((right_eigvec * Λ) * pinv(right_eigvec))
+        shift_op = real.((eigvec_r * Λ) * pinv(eigvec_r))
 
-        if return_eigendecomposition
+        if return_eigendecomp
 
-            eigval, right_eigvec, info = eigsolve(shift_op)
-            right_eigvec = reduce(hcat, right_eigvec)
-            left_eigvec = inv(right_eigvec) # may cause issues, i.e. slow
+            eigval, eigvec_r = eigen(shift_op)
+            eigvec_l = inv(eigvec_r) # may cause issues, i.e. slow
         end
     end
 
-    if return_eigendecomposition
-        left_eigvec = inv(right_eigvec) # may cause issues, i.e. slow
-        return shift_op, eigval, left_eigvec, right_eigvec
+    if return_eigendecomp
+        eigvec_l = inv(eigvec_r) # may cause issues, i.e. slow
+        return shift_op, eigval, eigvec_l, eigvec_r
     end
 
     return shift_op
@@ -208,21 +301,27 @@ function expectation_operator(coords, index_map, targets; func = immediate_futur
 
     """
 
+    if size(targets[1], 1) == 1
+        targets_list = [targets]
+    else
+        targets_list = targets
+    end
+
     if func isa Vector
         f_list = func
     else
-        f_list = Array{Function, 1}(undef, length(targets))
+        f_list = Array{Function, 1}(undef, length(targets_list))
         f_list = fill!(f_list, func)
     end
 
-    eoplist = Vector{Matrix{Float64}}(undef, length(targets))
+    eoplist = Vector{Matrix{Float64}}(undef, length(targets_list))
 
-    rtol = sqrt(eps(real(float(one(eltype(transpose(coords)))))))
-    sci = pinv(transpose(coords), rtol = rtol)
+    rtol = sqrt(eps(real(float(one(eltype(coords))))))
+    sci = pinv(coords, rtol = rtol)
 
     e_cnt = 1
 
-    for (tar, fun) in zip(targets, f_list)
+    for (tar, fun) in zip(targets_list, f_list)
 
         fvalues = fun(tar, index_map)
 
@@ -296,23 +395,27 @@ function predict(npred, state_dist, shift_op, expect_op; return_dist = 0, bounds
     Notes
     -----
 
-    The causal state space (conditional distributions) is not convex: linear combinations of causal states do not
-    necessarily correspond to a valid value in the conditionned domain. We are dealing here with distributions of
-    causal states, but these distributions are ultimately represented as linear combinations of the data span in
-    a Reproducing Kernel Hilbert Space, or, in this case, as combinations of eigenbasis vectors (themselves represented
-    in RKHS). Therefore, the state distributions are also linear combinations of other causal states. Ultimately,
-    the continuous-time model converges to a limit distribution, which is an average distribution that need not
-    correspond to any single state, so the non-convexity is not an issue for that limit distribution. Making
-    predictions with the expectation operator is still feasible, and we get the expected value from the limit
-    distribution as a result.
+    The causal state space (conditional distributions) is not convex: linear combinations of
+    causal states do not necessarily correspond to a valid value in the conditionned domain.
+    We are dealing here with distributions of causal states, but these distributions are
+    ultimately represented as linear combinations of the data span in a Reproducing Kernel
+    Hilbert Space, or, in this case, as combinations of eigenbasis vectors (themselves
+    represented in RKHS). Therefore, the state distributions are also linear combinations of
+    other causal states. Ultimately, the continuous-time model converges to a limit
+    distribution, which is an average distribution that need not correspond to any single
+    state, so the non-convexity is not an issue for that limit distribution. Making
+    predictions with the expectation operator is still feasible, and we get the expected
+    value from the limit distribution as a result.
 
-    If, instead, one wants a trajectory, and not the limit average, then a method is required to ensure that each
-    predicted state remains valid as a result of applying a linear shift operator. The Nearest Neighbours method is an
-    attempt to solve this issue. The preimage issue is a recurrent problem in machine learning and no single answer
-    can currently solve all cases.
+    If, instead, one wants a trajectory, and not the limit average, then a method is
+    required to ensure that each predicted state remains valid as a result of applying a
+    linear shift operator. The Nearest Neighbours method is an attempt to solve this issue.
+    The preimage issue is a recurrent problem in machine learning and no single answer can
+    currently solve all cases.
 
     """
 
+    # new predicted diffusion space coordinates
     all_state_dists = Array{Float64, 2}(undef, length(state_dist), npred)
 
     pred = Vector{Matrix{Float64}}(undef, length(expect_op))
@@ -321,7 +424,7 @@ function predict(npred, state_dist, shift_op, expect_op; return_dist = 0, bounds
 
     if isa(knn_convexity, Int) && knn_convexity > 0
 
-        num_basis = size(coords, 2)
+        num_basis = size(coords, 1)
 
         if isnothing(knndim) || knndim > num_basis || !isa(knndim, Int)
             knndim = num_basis
@@ -329,7 +432,7 @@ function predict(npred, state_dist, shift_op, expect_op; return_dist = 0, bounds
         if isnothing(extent) extent = 0.0 end
 
         # Euclidean(3.0), Chebyshev, Minkowski(3.5) and Cityblock
-        balltree = BallTree(transpose(coords[:, 1:knndim]); leafsize = 30)
+        balltree = BallTree(coords[1:knndim, :]; leafsize = 30)
 
         if knn_convexity > 1
 
@@ -401,7 +504,7 @@ function predict(npred, state_dist, shift_op, expect_op; return_dist = 0, bounds
 
     for p in 1:npred
 
-        if return_dist==2
+        if return_dist == 2
             all_state_dists[:, p] = state_dist
         end
 
@@ -421,6 +524,7 @@ function predict(npred, state_dist, shift_op, expect_op; return_dist = 0, bounds
             else
                 pred[eidx] = cat(pred[eidx], new_pred, dims = 1)
             end
+
         end
 
         # Evolve the distribution
@@ -436,7 +540,7 @@ function predict(npred, state_dist, shift_op, expect_op; return_dist = 0, bounds
 
             if knn_convexity > 1
 
-                temp_c = Matrix(transpose(coords[idxs, :]))
+                temp_c = Matrix(coords[:, idxs])
 
                 # Setting the parameters to their newest values
                 for i in 1:num_basis
@@ -451,7 +555,7 @@ function predict(npred, state_dist, shift_op, expect_op; return_dist = 0, bounds
 
             elseif knn_convexity == 1
 
-                state_dist = coords[idxs[1], :]
+                state_dist = coords[:, idxs[1]]
 
                 if !isnothing(problem)
 
@@ -490,18 +594,18 @@ function predict(npred, state_dist, shift_op, expect_op; return_dist = 0, bounds
 
     if return_dist == 1
 
-        return pred, transpose(state_dist)
+        return pred, state_dist
 
     elseif return_dist == 2
 
-        return pred, transpose(all_state_dists)
+        return pred, all_state_dists
     end
 
     return pred
 end
 
 """
-    state_dist = new_coords(Ks, Gs, coords; method = "nnls")
+    state_dist = new_coords(Ks, Gs, coords; alg = :nnls)
 
 # Description
 Compute the best matching state distributions.
@@ -550,7 +654,7 @@ function new_coords(Ks, Gs, coords; alg = :nnls)
     Ω = Ω ./ sum(Ω, dims = 1)
     # q0 is specified in the original RKHS representation, for each sample.
     # Turn it into an eigen space representation (scaled if coords are scaled)
-    nc = transpose(Ω) * coords
+    nc = transpose(Ω) * transpose(coords)
     # Since q0 is normalized, and since all the first components of the coordinates are 1, the first entry of the state distribution should also be 1
     if !isapprox(nc[:,1],ones(length(nc[:,1])))
 
@@ -559,5 +663,5 @@ function new_coords(Ks, Gs, coords; alg = :nnls)
     # ensure there are no numerical roundoff
     nc = nc ./ nc[:,1]
 
-    return nc
+    return transpose(nc)
 end

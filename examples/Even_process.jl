@@ -53,11 +53,11 @@ end
     # Compute a spectral basis for representing the causal states.
     println("\n3. Projection")
     @time begin
-        eigenvalues, basis, coords = spectral_basis(Gs, num_basis = 2)
+        eigenvalues, basis, coords = spectral_basis(Gs, num_basis = 2, scaled = false)
     end
 end
 
-df = DataFrame(Ψ₁ = coords[:,2])
+df = DataFrame(Ψ₁ = coords[2,:])
 p = plot(df, x = :Ψ₁, kind = "histogram", nbinsx = 100, histnorm = "probability density")
 
 display(p)

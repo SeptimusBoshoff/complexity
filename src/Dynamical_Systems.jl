@@ -10,7 +10,7 @@ function Logistic_Map(x, λ; r = 3.9277370017867516)
 
     x = r*x*(1 - x)
 
-    if λ == 0 
+    if λ == 0
         λ = log.(2, abs.(r .- 2*r*x[1]))
     else
         λ = λ .+ log.(2, abs.(r .- 2*r*x[1]))
@@ -35,7 +35,7 @@ function Lorenz!(du, u, p, t)
     σ, ρ, β = p
 
     du[1] = σ*(y - x)
-    du[2] = ρ*x- y - x*z 
+    du[2] = ρ*x- y - x*z
     du[3] = x*y - β*z
 
     return du
@@ -44,19 +44,19 @@ end
 function Driven_Duffing!(du, u, p, t)
 
     #= Theory
-        The driven duffing system, a forced harmonic ocillator, is an example 
-        of a nonautomonous system. That is, it has a time dependence. It is also 
+        The driven duffing system, a forced harmonic ocillator, is an example
+        of a nonautomonous system. That is, it has a time dependence. It is also
         an example of a three-dimensional system. Similarly, an nth-order time-
-        dependent equation is a special case of an (n+1)-dimensional system. 
-        By this trick, we may remove any time dependence by adding an extra 
-        dimension to the system. A more physical motivation is that we need 
+        dependent equation is a special case of an (n+1)-dimensional system.
+        By this trick, we may remove any time dependence by adding an extra
+        dimension to the system. A more physical motivation is that we need
         to know three numbers u[1], u[2], and u[3], to predict that future,
         given the present. It is a 2nd order differential equaion
 
         m = mass
         δ = controls the amount of damping
         α = controls the linear stiffness
-        β = controls the amount of non-linearity in the restoring force; 
+        β = controls the amount of non-linearity in the restoring force;
             if zero the Duffing equation is a damped and driven simple harmonic oscillator
         γ = amplitude of the periodic driving force
         ω = angular frequency
@@ -86,6 +86,17 @@ function Pendulum!(du, u, p, t)
 
     du[1] = ω
     du[2] = -b/m*ω - (g/L)*sin(θ)
+
+    return du
+end
+
+function Van_der_Pol!(du, u, p, t)
+
+    x, y = u
+    μ = p[1]
+
+    du[1] = y
+    du[2] = μ*(1 - x^2)*y - x
 
     return du
 end

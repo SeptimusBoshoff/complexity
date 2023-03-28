@@ -33,7 +33,7 @@ p = [m, g, L, b]
 #-------------------------------------------------------------------------------------------
 # Machine parameters
 
-sampling = 5 # machine retain 1 in every so many samples
+sampling = 3 # machine retain 1 in every so many samples
 
 history = 5 # backward trajectory [seconds]
 future = 5 # forward trajectory [seconds]
@@ -117,7 +117,7 @@ println("\nA. Training")
 
     @time begin
         println("\n1. Generating gram matrices")
-        Gx, Gy, index_map = series_Gxy(data_train, scale, npast, nfuture)
+        Gx, Gy, index_map = series_Gxy(data_train[1], scale, npast, nfuture)
     end
 
     @time begin
@@ -139,7 +139,7 @@ println("\nA. Training")
         # indices in the index map. Data series formed by multiple contiguous time
         # blocks are supported, as well as the handling of NaN values
         println("\n4. Forward Shift Operator")
-        shift_op = shift_operator(coords_train)
+        shift_op = shift_operator(coords_train, alg = :pinv)
     end
 
     @time begin
@@ -160,11 +160,11 @@ println("\nB. Validation")
 
     println("6. Prediction")
 
-    npast_val = 200
+    npast_val = npast
     ic = [data_val[1][1:npast_val], data_val[2][1:npast_val]] # initial condition
 
     # step 1. Build a kernel similarity vector with sample data
-    Kx = series_newKx(ic, data_train, index_map, scale, npast_val)
+    Kx = series_newKx(ic[1], data_train[1], index_map, scale, npast_val)
     # step 2. Embed to get similarity vector in state space
     Ks = embed_Kx(Kx, Gx, embedder)
     # step 3. Build a probability distribution over states.
@@ -173,7 +173,6 @@ println("\nB. Validation")
     pred_hor = N - npast_val # prediction horizon
 
     pred, coords_val = predict(pred_hor, coords_ic[1, :], shift_op, expect_op, return_dist = 2)
-    final_dist = coords_val[:, end]
 
 end
 
@@ -190,12 +189,12 @@ df_x_y_t = DataFrame(x = data_train[1], y = data_train[2],
                     x_pred = x_pred, y_pred = y_pred,
                     t = tₘ)
 
-trace_x = scatter(df_x_y_t, x = :t, y = :y, name = "train-y")
-trace_y = scatter(df_x_y_t, x = :t, y = :x, name = "train-x")
-trace_ŷ = scatter(df_x_y_t, x = :t, y = :ŷ, name = "val-y")
+trace_x = scatter(df_x_y_t, x = :t, y = :x, name = "train-x")
+trace_y = scatter(df_x_y_t, x = :t, y = :y, name = "train-y")
 trace_x̂ = scatter(df_x_y_t, x = :t, y = :x̂, name = "val-x")
-trace_yp = scatter(df_x_y_t, x = :t, y = :y_pred, name = "pred-y")
+trace_ŷ = scatter(df_x_y_t, x = :t, y = :ŷ, name = "val-y")
 trace_xp = scatter(df_x_y_t, x = :t, y = :x_pred, name = "pred-x")
+trace_yp = scatter(df_x_y_t, x = :t, y = :y_pred, name = "pred-y")
 
 plot_x_t = plot([trace_x, trace_y,
                 trace_x̂, trace_ŷ,

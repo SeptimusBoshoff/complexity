@@ -105,7 +105,7 @@ scale = sum(true_pk_vals)/length(true_pk_vals) - sum(true_valy_vals)/length(true
             You can specify other functions, see the documentation
         =#
         println("\n5. Expectation Operator")
-        expect_op = expectation_operator(coords, index_map, [data])
+        expect_op = expectation_operator(coords, index_map, data)
     end
 
     @time begin
