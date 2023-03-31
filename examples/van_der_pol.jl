@@ -16,7 +16,7 @@ println("...........o0o----ooo0§0ooo~~~  START  ~~~ooo0§0ooo----o0o...........
 x₀_range = [-17, 17]
 y₀_range = [-23, 23]
 
-μ_s = 0.005 # time step size (seconds)
+μ_s = 0.005 # dt - time step size (seconds)
 
 # ******************************************************************************************
 
@@ -137,7 +137,7 @@ println("\nA. Training")
         # Compute a spectral basis for representing the causal states.
         # Find a reduced dimension embedding and extract the significant coordinates"
         println("\n3. Projection")
-        eigenvalues, basis, coords_train = spectral_basis(Gs, num_basis = 20)
+        eigenvalues, basis, coords_train = spectral_basis(Gs, num_basis = 30)
     end
 
     @time begin
@@ -145,7 +145,8 @@ println("\nA. Training")
         # consecutive indices in the index map. Data series formed by multiple contiguous
         # time blocks are supported, as well as the handling of NaN values
         println("\n4. Forward Shift Operator")
-        shift_op = shift_operator(coords_train, index_map = index_map, alg = :dmd)
+        shift_op, DMD, SVDr = shift_operator(coords_train, alg = :dmd, svd_r = 30)
+        #shift_op = shift_operator(coords_train, alg = :nnls)
     end
 
     @time begin
@@ -169,8 +170,8 @@ println("\nB. Validation")
     npast_val = npast
 
     # initial conditions
-    ic = [data_val[1][1:npast_val + 1],
-            data_val[2][1:npast_val + 1]]
+    ic = [data_val[1][1:npast_val + 4],
+            data_val[2][1:npast_val + 4]]
 
     # step 1. Build a kernel similarity vector with sample data
     Kx = series_newKx(ic, data_train, index_map, scale, npast_val)
@@ -181,7 +182,8 @@ println("\nB. Validation")
 
     pred_hor = length(tₘ_val) - npast_val # prediction horizon
 
-    pred, coords_pred = predict(pred_hor, coords_val[:, 1], shift_op, expect_op, return_dist = 2)
+    pred, coords_pred = predict(pred_hor, coords_val[:, :], shift_op, expect_op,
+    return_dist = 2, DMD = DMD)
     #,knn_convexity = 5, knndim = 10, coords = coords_train, extent = 0.05)
 
 end
@@ -209,7 +211,7 @@ DSS = DataFrame(Ψ₁_train = vec([coords_train[2,:]; nans]),
                 Ψ₂_train = vec([coords_train[3,:]; nans]),
                 Ψ₁_pred = coords_pred[2,:],
                 Ψ₂_pred = coords_pred[3,:],
-                t = tₘ_val[npast_val+1:end])
+                t = tₘ_val[npast_val + 1:end])
 
 #-------------------------------------------------------------------------------------------
 # Plots
@@ -296,13 +298,90 @@ plot_DSS = plot(traces,
                     scene = attr(
                         xaxis_title = "Ψ₁",
                         yaxis_title = "Ψ₂",
-                        zaxis_title = "Ψ₃",
                     ),
                     ),
                 )
 
 #display(plot_DSS)
 
+# ******************************************************************************************
+# Koopman Modes (Phi)
+
+tr = 6
+
+Phi = DMD[1]
+
+traces = [(real(Phi[:,1:tr])), (imag(Phi[:,1:tr]))]
+
+plot_ϕr = plot(traces[1],
+                Layout(
+                    title = attr(
+                        text = "Real(ϕ)",
+                    ),
+                    title_x = 0.5,
+                    #yaxis_title = "Real(ϕ)",
+                    ),
+                )
+
+plot_ϕi = plot(traces[2],
+                Layout(
+                    title = attr(
+                        text = "Imaginary(ϕ)",
+                    ),
+                    title_x = 0.5,
+                    #yaxis_title = "Imag(ϕ)",
+                    ),
+                )
+
+plot_ϕ = [plot_ϕr; plot_ϕi]
+relayout!(plot_ϕ, title_text = "DMD eigenvectors")
+#display(plot_ϕ)
+
+# ******************************************************************************************
+# Single Value Decomposition
+
+tr = 4
+Σ = (SVDr[2][1:tr]./(sum(SVDr[2])))
+
+plot_Σ = plot(Σ,
+                Layout(
+                    title = attr(
+                        text = "Singular Values",
+                    ),
+                    title_x = 0.5,
+                    yaxis_title = "Σ [%]",
+                    ),
+                )
+
+#display(plot_Σ)
+
+U = real(SVDr[1][:, :])
+
+plot_U = plot(U,
+                Layout(
+                    title = attr(
+                        text = "Left Singular Vectors", # SVD modes
+                    ),
+                    title_x = 0.5,
+                    yaxis_title = "U",
+                    ),
+                )
+
+#display(plot_U)
+
+V = real(SVDr[3][:, 2:tr])
+
+plot_V = plot(V,
+                Layout(
+                    title = attr(
+                        text = "Right Singular Vectors",
+                    ),
+                    title_x = 0.5,
+                    yaxis_title = "V",
+                    ),
+                )
+
+#display(plot_V)
 # ******************************************************************************************
 
 println("...........o0o----ooo0§0ooo~~~   END   ~~~ooo0§0ooo----o0o...........\n")
