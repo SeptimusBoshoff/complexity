@@ -27,7 +27,7 @@ p = [σ, ρ, β]
 #-------------------------------------------------------------------------------------------
 # Machine parameters
 
-sampling = 5 # machine retain 1 in every so many samples
+sampling = 20 # machine retain 1 in every so many samples
 
 history = 5 # backward trajectory [seconds]
 future = 5 # forward trajectory [seconds]
@@ -46,10 +46,10 @@ window_size = npast + nfuture
 u0 = [rand(Uniform(x₀_range[1], x₀_range[2])),
         rand(Uniform(y₀_range[1], y₀_range[2])),
         rand(Uniform(z₀_range[1], z₀_range[2]))] # initial conditions
-u0 = [8.1, 13.4, 16.8]
+u0 = [9.9116, 13.4339, 23.8203]
 
 μ_s = 0.005 # time step size (seconds)
-t_final_train = 30 # max simulation time (seconds)
+t_final_train = 300 # max simulation time (seconds)
 
 # ******************************************************************************************
 
@@ -68,10 +68,11 @@ u_train = reduce(hcat, sol_train.u)
 u0 = [rand(Uniform(x₀_range[1], x₀_range[2])),
         rand(Uniform(y₀_range[1], y₀_range[2])),
         rand(Uniform(z₀_range[1], z₀_range[2]))] # initial conditions
-u0 = [-7.15, 0.43, 33.49]# .+ 1e-1
+u0 = [-5.479, 2.5106, 32.5884]# .+ 1e-1
+u0 = [9.9116, 13.4339, 23.8203]
 
 μ_s = 0.005 # time step size (seconds)
-t_final_val = 30 # max simulation time (seconds)
+t_final_val = 300 # max simulation time (seconds)
 
 # ******************************************************************************************
 
@@ -94,11 +95,13 @@ xₘ_train = sol_train(tₘ_train) # machine samples of the continuous system
 uₘ_train = reduce(hcat, xₘ_train.u)
 
 # positions
-x_train = uₘ_train[1,:]
-y_train = uₘ_train[2,:]
-z_train = uₘ_train[3,:]
+x_train = round.(uₘ_train[1,:], digits = 1)
+y_train = round.(uₘ_train[2,:], digits = 1)
+z_train = round.(uₘ_train[3,:], digits = 1)
 
-data_train = [vec(x_train), vec(y_train), vec(z_train)]
+data_train = [vec(x_train),
+                vec(y_train),
+                vec(z_train)]
 
 #bandwidth, i.e. Kernel Scale
 scale = [maximum(data_train[1]) - minimum(data_train[1]);
@@ -145,7 +148,7 @@ println("\nA. Training")
         # Compute a spectral basis for representing the causal states.
         # Find a reduced dimension embedding and extract the significant coordinates"
         println("\n3. Projection")
-        eigenvalues, basis, coords_train = spectral_basis(Gs, num_basis = 500)
+        eigenvalues, basis, coords_train = spectral_basis(Gs, num_basis = 100)
     end
 
     @time begin
@@ -153,7 +156,8 @@ println("\nA. Training")
         # consecutive indices in the index map. Data series formed by multiple contiguous
         # time blocks are supported, as well as the handling of NaN values
         println("\n4. Forward Shift Operator")
-        shift_op = shift_operator(coords_train, index_map = index_map, alg = :nnls)
+        shift_op, DMD, SVDr = shift_operator(coords_train, alg = :hankel, hankel_rank = 2000, svd_tr = 99)
+        #shift_op = shift_operator(coords_train, alg = :nnls)
     end
 
     @time begin
@@ -190,8 +194,11 @@ println("\nB. Validation")
 
     pred_hor = length(tₘ_val) - npast_val # prediction horizon
 
-    pred, coords_pred = predict(pred_hor, coords_val[:, 1], shift_op, expect_op, return_dist = 2
-    ,knn_convexity = 5, knndim = 10, coords = coords_train, extent = 0.05)
+    #= pred, coords_pred = predict(pred_hor, coords_val[:, 1], expect_op, shift_op = shift_op,
+    knn_convexity = 6, knndim = 100, coords = coords_train, extent = 0.05) =#
+
+    pred, coords_pred = predict(pred_hor, coords_val[:, :], expect_op, DMD = DMD)
+    #knn_convexity = 1, knndim = 10, coords = coords_train, extent = 0.05)
 
 end
 
@@ -337,6 +344,101 @@ plot_DSS_3d = plot(traces,
 
 #display(plot_DSS_3d)
 
+# ******************************************************************************************
+# ******************************************************************************************
+# Koopman Modes (Phi)
+
+tr = 10
+
+Phi = DMD[1]
+
+traces = [(real(Phi[:,1:tr])), (imag(Phi[:,1:tr]))]
+
+plot_ϕr = plot(traces[1],
+                Layout(
+                    title = attr(
+                        text = "Real(ϕ)",
+                    ),
+                    title_x = 0.5,
+                    #yaxis_title = "Real(ϕ)",
+                    ),
+                )
+
+plot_ϕi = plot(traces[2],
+                Layout(
+                    title = attr(
+                        text = "Imaginary(ϕ)",
+                    ),
+                    title_x = 0.5,
+                    #yaxis_title = "Imag(ϕ)",
+                    ),
+                )
+
+plot_ϕ = [plot_ϕr; plot_ϕi]
+relayout!(plot_ϕ,
+        title_text = "DMD eigenvectors ≈ Koopman Eigenfunctions",
+        title_x = 0.5,)
+#display(plot_ϕ)
+
+Λ = (abs.(DMD[2][1:tr])./(sum(abs.(DMD[2]))))
+
+plot_Λ = plot(Λ,
+                Layout(
+                    title = attr(
+                        text = "DMD / Koopman Eigenvalues",
+                    ),
+                    title_x = 0.5,
+                    yaxis_title = "Λ [%]",
+                    ),
+                )
+
+#display(plot_Λ)
+
+# ******************************************************************************************
+# Single Value Decomposition
+
+tr = 80
+Σ = (SVDr[2][2:tr]./(sum(SVDr[2])))
+
+plot_Σ = plot(Σ,
+                Layout(
+                    title = attr(
+                        text = "Singular Values",
+                    ),
+                    title_x = 0.5,
+                    yaxis_title = "Σ [%]",
+                    ),
+                )
+
+#display(plot_Σ)
+
+U = real(SVDr[1][:, 1:tr])
+
+plot_U = plot(U,
+                Layout(
+                    title = attr(
+                        text = "Left Singular Vectors", # SVD modes
+                    ),
+                    title_x = 0.5,
+                    yaxis_title = "U",
+                    ),
+                )
+
+#display(plot_U)
+
+V = real(SVDr[3][:, 1:tr])
+
+plot_V = plot(V,
+                Layout(
+                    title = attr(
+                        text = "Right Singular Vectors",
+                    ),
+                    title_x = 0.5,
+                    yaxis_title = "V",
+                    ),
+                )
+
+#display(plot_V)
 # ******************************************************************************************
 
 println("...........o0o----ooo0§0ooo~~~   END   ~~~ooo0§0ooo----o0o...........\n")

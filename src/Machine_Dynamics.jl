@@ -31,7 +31,7 @@ system typically defined on a diffusion state space.
 - `eigvec_l::Matrix{Float64}`: TODO
 - `eigvec_r::Matrix{Float64}`: TODO
 """
-function shift_operator(coords; index_map = nothing, return_eigendecomp = false, alg = :nnls, hankel_rank = 5, hankel_dims = size(coords, 1), svd_r = nothing)
+function shift_operator(coords; index_map = nothing, return_eigendecomp = false, alg = :nnls, hankel_rank = 1, svd_tr = nothing, hankel_dims = size(coords, 1))
 
     # TODO: generator, meaning the log in eigen decomposition form
     # This would allow to compute powers more efficiently
@@ -58,15 +58,15 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
     # To replace in formulas:
     valid_next = valid_prev .+ 1
 
-    shift_op = zeros(dims, dims)
-    shift_op[1, 1] = 1.0
-
     # The idea now is to express the coordinates with no valid next values
     # as a combination of known coordinates
 
     # we want shift_op * transpose(coords[valid_prev,:]) = transpose(coords[valid_next,:])
 
     if alg == :nnls
+
+        shift_op = zeros(dims, dims)
+        shift_op[1, 1] = 1.0
 
         # Using non-negative least squares works better
 
@@ -90,27 +90,124 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
 
     elseif alg == :pinv
 
+        shift_op = zeros(dims, dims)
+        shift_op[1, 1] = 1.0
+
         # This is slower
         # To test: Using inverses yields the least accurate results.
 
         shift_op[2:end,:] = (coords[2:end, valid_next]) * pinv(coords[:, valid_prev])
 
-    elseif alg == :dmd
+    elseif alg == :dmd # exact dmd
 
         # Step 1: Compute the singular value decomposition of coords
-
+        # we throw away the first coordinate and put it back later
         U, S, V = svd(coords[:, valid_prev])
-
-        #coords[:, valid_prev] = U*diagm(S)*V'
+        #coords[:, valid_prev] = U*Diagonal(S)*V'
 
         # Step 2: Truncate matrices
-        # Find r to capture 90% of the energy
-        cdS = cumsum(S)./sum(S)
-        mean = sum(cdS)/length(S)
-        #r = findfirst(cdS .>= 0.99) # truncation rank
-        r = svd_r#length(S)
+        if isnothing(svd_tr)
 
-        if r === nothing r = length(S) end
+            r = length(S)
+
+        elseif svd_tr > dims
+
+            r = dims
+
+        elseif (svd_tr > 0 && svd_tr <= 1)
+
+            # Find r to capture svd_tr% of the energy
+            cdS = cumsum(S)./sum(S)
+            mean = sum(cdS)/length(S)
+            r = findfirst(cdS .>= svd_tr) # truncation rank
+
+        else
+
+            r = svd_tr
+        end
+
+        Ur = U[:, 1:r]
+        Sr = Diagonal(S[1:r])
+        Vr = V[:, 1:r]
+
+        # Step 3: Project A onto the POD modes of U
+        U_map = (coords[:, valid_next])*Vr*inv(Sr)
+
+        # Atilde - tells us how the POD modes evolve in time
+        # the least square fit matrix in the low rank subspace
+        shift_op = (Ur')*U_map
+
+    elseif alg == :hankel
+
+        hankel_dims = hankel_dims - 1 # another opportunity for dim reductions
+
+        wind = (num_coords - hankel_rank)
+
+        rows = hankel_dims*hankel_rank + 1
+
+        UH = Array{Float64, 2}(undef, rows, wind) # Hankel matrix
+        H = Array{Float64, 2}(undef, rows, wind) # Hankel matrix
+
+        j = 1
+        for i in 1:hankel_rank
+
+            if j == 1
+
+                UH[j:j + hankel_dims, :] = coords[1:hankel_dims+1, i+1:wind + i]
+
+                j = j + hankel_dims + 1
+            else
+
+                #= display(UH[j:j + hankel_dims - 1, :])
+                display(coords[2:hankel_dims, i+1:wind + i])
+                println(j) =#
+                UH[j:j + hankel_dims - 1, :] = coords[2:hankel_dims+1, i+1:wind + i]
+
+                j = j + hankel_dims
+            end
+        end
+
+        j = 1
+        for i in 1:hankel_rank
+
+            if j == 1
+
+                H[j:j + hankel_dims, :] = coords[1:hankel_dims+1, i:wind + i - 1]
+
+                j = j + hankel_dims + 1
+            else
+
+                H[j:j + hankel_dims - 1, :] = coords[2:hankel_dims+1, i:wind + i - 1]
+
+                j = j + hankel_dims
+            end
+        end
+
+        # Step 1: Compute the singular value decomposition of H
+
+        U, S, V = svd(H)
+        #H = U*diagm(S)*V'
+
+        # Step 2: Truncate matrices
+        if isnothing(svd_tr)
+
+            r = length(S)
+
+        elseif svd_tr > rows
+
+            r = rows
+
+        elseif (svd_tr > 0 && svd_tr <= 1)
+
+            # Find r to capture svd_tr% of the energy
+            cdS = cumsum(S)./sum(S)
+            mean = sum(cdS)/length(S)
+            r = findfirst(cdS .>= svd_tr) # truncation rank
+
+        else
+
+            r = svd_tr
+        end
 
         Ur = U[:, 1:r]
         Sr = Diagonal(S[1:r])
@@ -118,64 +215,9 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
 
         # Step 3: Project A onto the POD modes of U
 
-        dmd_operator = (coords[:, valid_next])*Vr*inv(Sr)
+        U_map = UH*Vr*inv(Sr)
 
-        # Atilde - tells us how the POD modes evolve in time
-        # the least square fit matrix in the low rank subspace
-        shift_op = (Ur')*dmd_operator
-
-        #@show (coords[:, valid_prev]) ≈ U*diagm(S)*V'
-
-    elseif alg == :hankel
-
-        hankel_dims = hankel_dims #- 1 # another opportunity for dim reductions
-
-        wind = (num_coords - hankel_rank)
-
-        UH = Array{Float64, 2}(undef, hankel_dims*hankel_rank, wind) # Hankel matrix
-        H = Array{Float64, 2}(undef, hankel_dims*hankel_rank, wind) # Hankel matrix
-
-        # Idea: if using diffusion map coordinates, let's throw away the first coordinate
-        # cause its always 1
-
-        j = 1
-        for i in 1:hankel_rank
-
-            UH[j:j + hankel_dims - 1, :] = coords[1:hankel_dims, i+1:wind + i]
-
-            j = j + hankel_dims
-
-        end
-
-        j = 1
-        for i in 1:hankel_rank
-
-            H[j:j + hankel_dims - 1, :] = coords[1:hankel_dims, i:wind + i - 1]
-
-            j = j + hankel_dims
-
-        end
-
-        # Step 1: Compute the singular value decomposition of H
-
-        U, S, V = svd(H)
-        #coords[:, valid_prev] = U*diagm(S)*V'
-
-        # Step 2: Truncate matrices
-        cdS = cumsum(S)./sum(S)
-        mean = sum(cdS)/length(S)
-        r = findfirst(cdS .>= mean) # truncation rank
-        r = length(S)
-
-        Us = U[:, 1:r]
-        Ss = S[1:r]
-        Vs = V[:, 1:r]
-
-        # Step 3: Project A onto the POD modes of U
-
-        dmd_operator = H*Vs*inv(Diagonal(Ss))
-
-        shift_op = (Us')*dmd_operator
+        shift_op = (Ur')*U_map
 
     end
 
@@ -186,7 +228,11 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
         # Step 4: The DMD modes are eigenvectors of the high-dimensional A matrix. The DMD
         # eigenvalues are also the eigenvalues of the full shift operator.
 
-        Phi = dmd_operator*eigvec_r
+        #= Phi = zeros(Complex, r+1, r+1)
+        Phi[1] = 1
+
+        Phi[2:end, 2:end] = U_map*eigvec_r =#
+        Phi= U_map*eigvec_r
         lambda = Diagonal(eigval) #discrete time
 
         #omega = log.(eigval)/timestep # continuous time DMD eigenvalues
@@ -198,7 +244,7 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
         b = (eigvec_r*lambda)\alpha1 # mode amplitude
 
         # A Φ = Λ Φ # the least square fit matrix
-        shift_op = real.(Phi*lambda*pinv(Phi))
+        #shift_op = real.(Phi*lambda*pinv(Phi))
 
     end
 
@@ -244,8 +290,9 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
         eigvec_l = inv(eigvec_r) # may cause issues, i.e. slow
         return shift_op, eigval, eigvec_l, eigvec_r
 
-    elseif alg == :dmd
+    elseif alg == :dmd || alg == :hankel
 
+        #DMD = (Phi, [1;eigval], [1;b]) # DMD eigenvectors, eigenvalues, modes
         DMD = (Phi, eigval, b) # DMD eigenvectors, eigenvalues, modes
         SingleValueDecomposition = (U, S, V)
         return shift_op, DMD, SingleValueDecomposition
@@ -367,7 +414,7 @@ function expectation_operator(coords, index_map, targets; func = immediate_futur
     return eoplist
 end
 
-function predict(npred, coords_ic, shift_op, expect_op; return_dist = 0, bounds = nothing, knn_convexity = nothing, coords = nothing, knndim = nothing, extent = nothing, DMD = nothing)
+function predict(npred, coords_ic, expect_op; return_dist = 2, bounds = nothing, knn_convexity = nothing, coords = nothing, knndim = nothing, extent = nothing, DMD = nothing, shift_op = nothing)
     """
     Predict values from the current causal states distribution
 
@@ -448,33 +495,35 @@ function predict(npred, coords_ic, shift_op, expect_op; return_dist = 0, bounds 
 
     """
 
-    coord = copy(coords_ic) # the a sequence leading up to the most recent initial condition
+    coord = copy(coords_ic)[:, 1] # the a sequence leading up to the most recent initial condition
     c_dims = size(coord, 1)
 
-    if size(coord, 1) < size(shift_op, 1) && !isnothing(DMD)
-        # we are using hankel dmd
-
-        # new predicted diffusion space coordinates
-        new_coords = Array{Float64, 2}(undef, size(shift_op, 1), npred)
-
-        hankel_rank = Int(size(shift_op, 1)/size(coord, 1))
-
-        coord = vec(coord[:, end:-1:1])
-        display(coord)
-
-    else
-        coord = coord[:, 1]
-        # new predicted diffusion space coordinates
-        new_coords = Array{Float64, 2}(undef, length(coord), npred)
-    end
+    pred_coords = Array{Float64, 2}(undef, c_dims, npred)
 
     if !isnothing(DMD)
+
         Phi = DMD[1]
         Λ = Diagonal(DMD[2]) #discrete time eigenvalues
         Λm = copy(Λ)
         #b = DMD[3]
-        U, S, V = svd(coord)
-        b = Phi\coord
+
+        if size(DMD[2], 1) != size(coord, 1)
+
+            # we're using hankel dmd
+            #b = Phi\vec(coords_ic[:, end:-1:1])
+            #b = Phi\vec(coords_ic[:, :])
+            hankel_rank = (length(DMD[2]) /size(coord, 1))
+
+            #= if length(vec(coords_ic[:, end:-1:1])) != size(Phi, 1)
+                #warning
+            end =#
+            b = DMD[3]
+
+        else
+
+            #b = DMD[3]
+            b = Phi\coord
+        end
     end
 
     eo_len = length(expect_op)
@@ -566,7 +615,7 @@ function predict(npred, coords_ic, shift_op, expect_op; return_dist = 0, bounds 
     for p in 1:npred
 
         if return_dist == 2
-            new_coords[:, p] = coord
+            pred_coords[:, p] = coord
         end
 
         # Apply the expectation operator to the current distribution
@@ -594,7 +643,7 @@ function predict(npred, coords_ic, shift_op, expect_op; return_dist = 0, bounds 
             coord = shift_op * coord
         else
             #coord = real(Phi*exp(Diagonal(omega.*(μ_m*p)))*b)
-            coord = real(Phi*(Λm)*b)
+            coord = real(Phi*(Λm)*b)[1:c_dims]
             Λm = Λm*Λ
         end
         # Normalize - not needed anymore by construction of the shift op??
@@ -666,7 +715,7 @@ function predict(npred, coords_ic, shift_op, expect_op; return_dist = 0, bounds 
 
     elseif return_dist == 2
 
-        return pred, new_coords
+        return pred, pred_coords
     end
 
     return pred

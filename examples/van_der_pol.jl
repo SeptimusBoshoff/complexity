@@ -26,7 +26,7 @@ p = [μ]
 #-------------------------------------------------------------------------------------------
 # Machine parameters
 
-sampling = 2 # machine retain 1 in every so many samples
+sampling = 20 # machine retain 1 in every so many samples - subsampling
 
 history = 5 # backward trajectory [seconds]
 future = 5 # forward trajectory [seconds]
@@ -44,9 +44,9 @@ window_size = npast + nfuture
 
 u0 = [rand(Uniform(x₀_range[1], x₀_range[2])),
         rand(Uniform(y₀_range[1], y₀_range[2]))] # initial conditions
-u0 = [0.1, 2]
+u0 = [1.012, -0.88]
 
-t_final_train = 50 # max simulation time (seconds)
+t_final_train = 70 # max simulation time (seconds)
 
 # ******************************************************************************************
 
@@ -64,9 +64,9 @@ u_train = reduce(hcat, sol_train.u)
 
 u0 = [rand(Uniform(x₀_range[1], x₀_range[2])),
         rand(Uniform(y₀_range[1], y₀_range[2]))] # initial conditions
-u0 = [1.71, 1.71]# .+ 1e-1
+u0 = [-1.941, 0.303]# .+ 1e-1
 
-t_final_val = 50 # max simulation time (seconds)
+t_final_val = 70 # max simulation time (seconds)
 
 # ******************************************************************************************
 
@@ -137,7 +137,7 @@ println("\nA. Training")
         # Compute a spectral basis for representing the causal states.
         # Find a reduced dimension embedding and extract the significant coordinates"
         println("\n3. Projection")
-        eigenvalues, basis, coords_train = spectral_basis(Gs, num_basis = 30)
+        eigenvalues, basis, coords_train = spectral_basis(Gs, num_basis = 35)
     end
 
     @time begin
@@ -145,7 +145,7 @@ println("\nA. Training")
         # consecutive indices in the index map. Data series formed by multiple contiguous
         # time blocks are supported, as well as the handling of NaN values
         println("\n4. Forward Shift Operator")
-        shift_op, DMD, SVDr = shift_operator(coords_train, alg = :dmd, svd_r = 30)
+        shift_op, DMD, SVDr = shift_operator(coords_train, alg = :hankel, hankel_rank = 10)
         #shift_op = shift_operator(coords_train, alg = :nnls)
     end
 
@@ -182,8 +182,7 @@ println("\nB. Validation")
 
     pred_hor = length(tₘ_val) - npast_val # prediction horizon
 
-    pred, coords_pred = predict(pred_hor, coords_val[:, :], shift_op, expect_op,
-    return_dist = 2, DMD = DMD)
+    pred, coords_pred = predict(pred_hor, coords_val[:, :], expect_op, DMD = DMD)
     #,knn_convexity = 5, knndim = 10, coords = coords_train, extent = 0.05)
 
 end
@@ -307,7 +306,7 @@ plot_DSS = plot(traces,
 # ******************************************************************************************
 # Koopman Modes (Phi)
 
-tr = 6
+tr = 12
 
 Phi = DMD[1]
 
@@ -334,13 +333,29 @@ plot_ϕi = plot(traces[2],
                 )
 
 plot_ϕ = [plot_ϕr; plot_ϕi]
-relayout!(plot_ϕ, title_text = "DMD eigenvectors")
+relayout!(plot_ϕ,
+        title_text = "DMD eigenvectors ≈ Koopman Eigenfunctions",
+        title_x = 0.5,)
 #display(plot_ϕ)
+
+Λ = (abs.(DMD[2][1:tr])./(sum(abs.(DMD[2]))))
+
+plot_Λ = plot(Λ,
+                Layout(
+                    title = attr(
+                        text = "DMD / Koopman Eigenvalues",
+                    ),
+                    title_x = 0.5,
+                    yaxis_title = "Λ [%]",
+                    ),
+                )
+
+#display(plot_Λ)
 
 # ******************************************************************************************
 # Single Value Decomposition
 
-tr = 4
+tr = 12
 Σ = (SVDr[2][1:tr]./(sum(SVDr[2])))
 
 plot_Σ = plot(Σ,
@@ -355,7 +370,7 @@ plot_Σ = plot(Σ,
 
 #display(plot_Σ)
 
-U = real(SVDr[1][:, :])
+U = real(SVDr[1][:, 2:tr])
 
 plot_U = plot(U,
                 Layout(
@@ -369,7 +384,7 @@ plot_U = plot(U,
 
 #display(plot_U)
 
-V = real(SVDr[3][:, 2:tr])
+V = real(SVDr[3][:, 1:tr])
 
 plot_V = plot(V,
                 Layout(
