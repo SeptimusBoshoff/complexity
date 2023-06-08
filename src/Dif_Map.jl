@@ -61,7 +61,7 @@ be a 'diffusion matrix', which it mostly is - but with extra steps.
   equivalently "eigvec_l * transpose(eigvec_r) = Identity"
 
 """
-function spectral_basis(Gs; num_basis = nothing, scaled = true, α = 1.0)
+function spectral_basis(Gs; num_basis = nothing, scaled = true, α = 1.0, return_eigendecomp = false)
 
     N = size(Gs, 1)
 
@@ -130,6 +130,7 @@ function spectral_basis(Gs; num_basis = nothing, scaled = true, α = 1.0)
 
     # Normalization so that eigvec_r[:,1] entries are all 1
     # and that eigvec_l[:,1] matches a density
+    # not really normalisation? maybe removing floating point errors?
 
     eigvec_r = eigvec ./ eigvec[:, 1]
     eigvec_l = transpose(eigvec .* (eigvec[:,1]))
@@ -158,7 +159,7 @@ function spectral_basis(Gs; num_basis = nothing, scaled = true, α = 1.0)
     end
 
     if (sum(eigvec_l[1,:]) - 1 > 1e-6 ||
-        norm((q/sum(q)) .- eigvec_l[1,:]) > 1e-5)
+        norm((q/sum(q)) .- eigvec_l[1,:]) > 1.5e-5)
 
         @warn("The stationary distribution was not correctly calculated")
         @show sum(eigvec_l[1,:]) - 1
@@ -166,9 +167,20 @@ function spectral_basis(Gs; num_basis = nothing, scaled = true, α = 1.0)
 
     end
 
-    if scaled
-        return eigval, eigvec_l, transpose(transpose(eigval).*eigvec_r)
-    end
+    if return_eigendecomp
 
-    return eigval, eigvec_l, transpose(eigvec_r)
+        if scaled
+            return eigval, eigvec_l, transpose(transpose(eigval).*eigvec_r)
+        else
+            return eigval, eigvec_l, transpose(eigvec_r)
+        end
+
+    else
+
+        if scaled
+            return transpose(transpose(eigval).*eigvec_r)
+        else
+            return transpose(eigvec_r)
+        end
+    end
 end

@@ -100,3 +100,28 @@ function Van_der_Pol!(du, u, p, t)
 
     return du
 end
+
+function σ_Van_der_Pol!(du, u, p, t)
+
+    du[1] = 0.0001
+    du[2] = 0.0001
+
+    return du
+end
+
+#_______________________________________________________________________________
+# Reinforcement Learning
+
+function Mountain_Car(x, a)
+
+    v_next = clamp(x[2] + 0.001*a[1] - 0.0025*cos(3*x[1]), -0.07, 0.07)
+    x_next = clamp(x[1] + v_next, -1.2, 0.5)
+
+    if ((x[1] + v_next) < -1.2) || ((x[1] + v_next) > 0.5)
+
+        v_next = 0
+
+    end
+
+    return [x_next, v_next]
+end

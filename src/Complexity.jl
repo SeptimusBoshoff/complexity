@@ -10,6 +10,7 @@ using NonNegLeastSquares
 using Revise
 using Test
 using TSVD
+using SpecialFunctions
 
 include("./Kernel_Machine.jl")
 include("./Machine_Dynamics.jl")

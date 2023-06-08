@@ -66,13 +66,34 @@ function series_Gxy(series, scale, npast, nfuture; decay=1, qcflags=nothing, loc
 
     kernel_params_ = set_kernel(kernel_type = kernel_type)
 
-    if size(series[1], 1) == 1
-        series_list = [series]
-    else
-        series_list = series
-    end
+    series_type = "nothing"
 
-    nseries = size(series_list, 1) # the number of sources / sensors
+    if typeof(series) == Vector{Float64}
+
+        # the state space is 1-d
+        series_list = [series]
+
+        series_type = "R¹"
+        num_eps = 1 # the number of runs
+        nseries = 1 # the number of sources / sensors
+
+    elseif typeof(series) == Vector{Vector{Float64}}
+
+        series_list = series
+
+        series_type = "Rⁿ"
+        num_eps = 1 # the number of runs
+        nseries = size(series, 1) # the number of sources / sensors
+
+    elseif typeof(series) == Vector{Vector{Vector{Float64}}}
+
+        series_list = copy(series[1])
+
+        series_type = "E x Rⁿ"
+        num_eps = length(series) # the number of runs
+        nseries = length(series[1]) # the number of sources / sensors
+
+    end
 
     if length(scale) != 1
         scales_list = scale
@@ -116,29 +137,61 @@ function series_Gxy(series, scale, npast, nfuture; decay=1, qcflags=nothing, loc
         end
     end
 
-    index_map = compute_index_map_multiple_sources(series_list, npasts_list, nfutures_list, qcflags_list, take2skipX = take2skipX)
+    s = 0 # sum of lengths of vectors
+    index_map = []
 
-    total_lx = nothing
-    total_ly = nothing
+    for i in 1:num_eps
+
+        if series_type == "E x Rⁿ"
+
+            index_map_i = compute_index_map_multiple_sources(series[i], npasts_list, nfutures_list, qcflags_list, take2skipX = take2skipX)
+
+            if i != 1
+
+                for j in 1:nseries
+                    series_list[j] = [series_list[j]; series[i][j]]
+                end
+
+                index_map = [index_map; index_map_i .+ s]
+                s += length(series[i][1])
+
+            else
+
+                index_map = index_map_i
+                s += length(series[i][1])
+            end
+
+        else
+
+            index_map = compute_index_map_multiple_sources(series_list, npasts_list, nfutures_list, qcflags_list, take2skipX = take2skipX)
+        end
+    end
+
+    Gx = nothing
+    Gy = nothing
 
     for (ser, sca, npa, nfu, dec, ldiff) in zip(series_list, scales_list, npasts_list, nfutures_list, decays_list, localdiff_list)
 
         lx, ly = series_xy_logk_indx(ser, sca, npa, nfu, dec, index_map, kernel_params_, ldiff)
 
-        if total_lx === nothing
+        if isnothing(Gx)
 
-            total_lx, total_ly = lx, ly
+            Gx, Gy = lx, ly
         else
 
-            parallel_add_lowtri!(total_lx, lx)
-            parallel_add_lowtri!(total_ly, ly)
+            parallel_add_lowtri!(Gx, lx)
+            parallel_add_lowtri!(Gy, ly)
         end
     end
 
-    parallel_exp_lowtri!(total_lx, nseries)
-    parallel_exp_lowtri!(total_ly, nseries)
+    parallel_exp_lowtri!(Gx, nseries)
+    parallel_exp_lowtri!(Gy, nseries)
 
-    return total_lx, total_ly, index_map
+    if series_type == "E x Rⁿ"
+        return Gx, Gy, index_map, series_list
+    else
+        return Gx, Gy, index_map
+    end
 end
 
 """
@@ -708,7 +761,7 @@ function embed_states(Gx, Gy; ϵ = 1e-8, normalize = true, return_embedder = fal
         #Ω = (Gx + ϵ*I) \ Gx
 
         Ω = copy(Gx) # this is our weight matrix
-        ldiv!(cholesky(Gx + ϵ*I), Ω)
+        ldiv!(factorize(Gx + ϵ*I), Ω)
 
     else
 
@@ -948,7 +1001,7 @@ function sx_logk(î, ĵ, new_series, ref_series, npast, factor_r_past, sum_r_p
     return sumx * sum_past_factor
 end
 
-function embed_Kx(Kx, Gx, embedder, ϵ = 1e-8)
+function embed_Kx(Kx, Gx, embedder, ϵ = 1e-8; alg = :ldiv)
     """
     Construct a similarity vector in state space, from a similarity vector in X space and using the embbeder returned by embed_states
 
@@ -962,7 +1015,362 @@ function embed_Kx(Kx, Gx, embedder, ϵ = 1e-8)
         Ks: the similarity vector, in state space
     """
 
-    omega = nonneg_lsq(Gx + ϵ*I, Kx, alg = :nnls)
+    if alg == :nnls # this is more accurate
 
-    return (embedder * omega)
+        omega = nonneg_lsq(Gx + ϵ*I, Kx, alg = :nnls)
+
+        Ks = (embedder * omega)
+
+    elseif alg == :ldiv # this is faster
+
+        #= Ω = (Gx + ϵ*I) \ Kx
+        Ks = embedder * Ω =#
+
+        Ω = copy(Kx) # this is our weight matrix
+        ldiv!(factorize(Gx + ϵ*I), Ω)
+        Ks = embedder * Ω
+
+    end
+
+    return Ks
+end
+
+function Gaussian_kernel(x₁, x₂, scale; dims = -1)
+
+    if dims == -1
+
+        k_x₁_x₂ = exp(-1*sum(abs2, x₁ - x₂)/((2*scale^2)))
+
+        return k_x₁_x₂
+    else
+
+        k_x₁_x₂ = exp(-1*sum(abs2, x₁ - x₂)/((2*scale^2)))
+
+        return k_x₁_x₂*Matrix(I, dims, dims)
+    end
+end
+
+function Gramian(data, scale; kernel = Gaussian_kernel, Σinv = nothing)
+
+    if !isa(data, Tuple)
+
+        if size(data,2) == 1
+
+            data = transpose(data)
+
+        end
+
+        n = size(data, 2)
+    else
+
+        n = size(data[1], 2)
+    end
+
+    G = Array{Float64,2}(undef, n, n)
+
+    # Triangular indexing, folded
+    # x
+    # y y     =>    z z z y y
+    # z z z         w w w w x
+    # w w w w
+    # outer loops can now be parallelized - all have about the same duration
+    if n % 2 == 1
+        m = n
+    else
+        m = n - 1
+    end
+    #Threads.@threads
+    Threads.@threads for k in (n+1)÷2:n-1
+
+        for l in 0:k-1
+
+            i = k + 1
+            j = l + 1
+
+            if kernel == Compatible_kernel
+
+                z₁ = (data[1][:,i], data[2][:,i], data[3][:,i])
+                z₂ = (data[1][:,j], data[2][:,j], data[3][:,j])
+
+                G[i, j] = Compatible_kernel(z₁, z₂, scale; kernel = Gaussian_kernel, Σinv = Σinv)
+
+            else
+
+                G[i, j] = kernel(data[:,i], data[:,j], scale)
+            end
+
+            #if (i == 1) && (j == 1)
+
+            G[j, i] = G[i, j]
+
+        end
+
+        for l in k:m-1
+
+            i = m - k + 1
+            j = m - l
+
+            if kernel == Compatible_kernel
+
+                z₁ = (data[1][:,i], data[2][:,i], data[3][:,i])
+                z₂ = (data[1][:,j], data[2][:,j], data[3][:,j])
+
+                G[i, j] = Compatible_kernel(z₁, z₂, scale; kernel = Gaussian_kernel, Σinv = Σinv)
+
+            else
+                G[i, j] = kernel(data[:,i], data[:,j], scale)
+            end
+
+            G[j, i] = G[i, j]
+
+        end
+
+    end
+
+    Threads.@threads for i in 1:n
+
+        G[i, i] = Gaussian_kernel(data[:,i], data[:,i], scale)
+
+    end
+
+    #G = G .+ Matrix(I,n,n)
+
+    return G
+end
+
+function Compatible_kernel(z₁, z₂, scale; kernel = Gaussian_kernel, Σinv = nothing)
+
+    dims = length(z₁[2])
+
+    k_z₁_z₂ = transpose(transpose(kernel(z₁[1], z₂[1], scale, dims = dims))*Σinv*(z₁[2] - z₁[3]))*(Σinv*(z₂[2] - z₂[3]))
+
+    #k_z₁_z₂ = transpose(transpose(kernel(x₁, x₂, ζ, dims = dims))*Σinv*(a₁ - μ₁))*(Σinv*(a₂ - μ₂))
+
+    return k_z₁_z₂
+end
+
+function KLSTD(data, rewards, scale, Σinv, γ; ϵ = 1e-6)
+
+    G = Gramian(data, scale; kernel = Compatible_kernel, Σinv = Σinv)
+
+    T = size(data[1], 2)
+
+    D = zeros(T, T)
+    b = zeros(T)
+
+    for k in 1:T
+
+        D += G[:,k]*transpose(G[:,k] - γ*G[:,k])
+        b += G[:,k]*rewards[k]
+
+    end
+
+    α = (D + ϵ*I) \ b # inv(D)*b
+
+    Q = zeros(T)
+
+    for k in 1:T
+
+        Q[k] = α[k]*sum(G[k,:])
+
+    end
+
+    return α, Q, D, b
+
+end
+
+function function_approximation(x, Λ, C, scale; kernel = Gaussian_kernel)
+
+    if isa(Λ, Vector)
+
+        N = length(Λ)
+        ϑ = Array{Float64,1}(undef, N) # feature vector
+        f_x = 0
+
+        for n in 1:N
+
+            if isa(x, Vector)
+                ϑ[n] = kernel(C[:,n], x, scale)
+            else
+                ϑ[n] = kernel(C[:,n], [x], scale)
+            end
+        end
+
+        f_x = (transpose(Λ)*ϑ)[1]
+
+    else
+
+        N = size(Λ, 2)
+        ϑ = Array{Float64,1}(undef, N) # feature vector
+        f_x = zeros(size(Λ, 1))
+
+        for n in 1:N
+
+            if isa(x, Vector)
+                ϑ[n] = kernel(C[:,n], x, scale)
+            else
+                ϑ[n] = kernel(C[:,n], [x], scale)
+            end
+
+        end
+
+        f_x = Λ*ϑ
+    end
+
+    if size(Λ, 1) == 1
+        return f_x[1]
+    else
+        return f_x
+    end
+
+end
+
+function SGA(data, scale, Σinv, η, Q; kernel = Gaussian_kernel)
+
+    T = size(data[1], 2)
+
+    f = zeros(T)
+
+    G  = Gramian(data[1], scale; kernel = kernel)
+
+    for i in 1:T
+
+        for k in 1:T
+
+            #= println("Q[i] = ", Q[i])
+            println("G[k,i] = ", G[k,i])
+            println("Σinv = ", Σinv)
+            println("(data[2][:,k] - data[3][:,k]) = ", (data[2][:,k] - data[3][:,k])) =#
+
+            f[i] += (Q[i]*G[k,i]*Σinv*(data[2][:,k] - data[3][:,k]))[1]
+
+        end
+
+        #println("Q[i] = ", Q[i])
+
+        f[i] = (data[3][:,i])[1] + η*f[i]
+
+    end
+
+    return f
+end
+
+function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ = 1e-6)
+
+    if size(Y,2) == 1
+        Y = transpose(Y)
+    end
+    if isa(data, Vector)
+        data = transpose(data)
+    end
+
+    U = Gramian(data, scale; kernel = kernel)
+    G = copy(U)
+
+    T = size(U,1)
+    m = size(Y,1)
+    d = size(data,1)
+
+    for i in 1:T
+
+        U[:,i] = U[:,i]/sum(abs2, U[:,i])
+
+    end
+
+    error_1 = norm(Y)
+
+    if isnothing(N)
+
+        Φ = Array{Float64,2}(undef, T, 1)
+        C = Array{Float64,2}(undef, d, 1)
+        ids = Array{Int64,1}(undef, 1)
+
+        n = 1
+
+        error = 100
+
+        while error > δ
+
+            if n > 1
+
+                vector = diag(transpose(U)*transpose(R)*(R*(U)))
+
+                index = argmax(vector .* (1 .- [i in ids[1:n-1] for i in eachindex(vector)]))
+
+                ids = vcat(ids, index)
+                Φ = hcat(Φ, G[:,ids[n]])
+                C = hcat(C, copy(data[:,ids[n]]))
+
+                #Λ[:,1:n] = Y*pinv(transpose(Φ[:,1:n]))
+                Λ = Y*inv(Φ*transpose(Φ) + ϵ*I)*Φ
+
+            else
+
+                R = Y
+
+                index = argmax(diag(transpose(U)*transpose(R)*(R*(U))))
+
+                ids[1] = index
+                Φ[:,1] = G[:,ids[1]]
+                C[:,1] = copy(data[:,ids[1]])
+
+                #Λ[:,1:n] = Y*pinv(transpose(Φ[:,1:n]))
+                Λ = Y*inv(Φ*transpose(Φ) + ϵ*I)*Φ
+            end
+
+            R = Y - Λ*transpose(Φ)
+
+            error = 100*norm(R)/error_1
+
+            if n == T
+                break;
+            else
+                n += 1
+            end
+        end
+
+    else
+
+        Φ = Array{Float64,2}(undef, T, N)
+        C = Array{Float64,2}(undef, d, N)
+        ids = Array{Int64,1}(undef, N)
+        Λ = Array{Float64,2}(undef, m, N)
+
+        N = clamp(N, 1, T)
+
+        for n in 1:N
+
+            if n > 1
+
+                R = Y - Λ[:,1:n-1]*transpose(Φ[:,1:n-1])
+
+                #vector = diag(transpose(R*transpose(U))*(R*transpose(U)))
+                vector = diag(transpose(U)*transpose(R)*(R*(U)))
+
+                index = argmax(vector .* (1 .- [i in ids[1:n-1] for i in 1:length(vector)]))
+
+            else
+
+                R = Y
+
+                index = argmax(diag(transpose(U)*transpose(R)*(R*(U))))
+            end
+
+            ids[n] = index
+            Φ[:,n] = G[:,ids[n]]
+            C[:,n] = copy(data[:,ids[n]])
+
+            #Λ[:,1:n] = Y*pinv(transpose(Φ[:,1:n]))
+            Λ[:,1:n] = Y*inv(Φ[:,1:n]*transpose(Φ[:,1:n]) + ϵ*I)*Φ[:,1:n]
+
+        end
+
+        R = Y - Λ*transpose(Φ)
+
+        error = 100*norm(R)/error_1
+    end
+
+    #f = Λ*transpose(Φ)
+
+    return Λ, C, error
 end

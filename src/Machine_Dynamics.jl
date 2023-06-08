@@ -31,7 +31,7 @@ system typically defined on a diffusion state space.
 - `eigvec_l::Matrix{Float64}`: TODO
 - `eigvec_r::Matrix{Float64}`: TODO
 """
-function shift_operator(coords; index_map = nothing, return_eigendecomp = false, alg = :nnls, hankel_rank = 1, svd_tr = nothing, hankel_dims = size(coords, 1))
+function shift_operator(coords; index_map = nothing, return_eigendecomp = false, alg = :dmd, hankel_rank = 1, svd_tr = nothing,  residual = false)
 
     # TODO: generator, meaning the log in eigen decomposition form
     # This would allow to compute powers more efficiently
@@ -47,19 +47,40 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
 
         valid_prev = range(1, num_coords - 1)
         indices_no_next = [num_coords]
-    else
+
+        # To replace in formulas:
+        valid_next = valid_prev .+ 1
+
+        # The idea now is to express the coordinates with no valid next values
+        # as a combination of known coordinates
+
+    elseif alg != :hankel
 
         # build reverse operators
         valid_prev = deleteat!(collect(range(1, num_coords - 1)), findall(diff(index_map) .!= 1))
-        # also known as gaplocs, plus the latest state
+        # also known as gaplocs, plus the latest state - these are the non-valid previous coordinates
         indices_no_next = setdiff(range(1, num_coords), valid_prev)
+
+        valid_next = valid_prev .+ 1
+
+    elseif alg == :hankel
+
+        valid_prev = deleteat!(collect(range(1, num_coords - 1)), findall(diff(index_map) .!= 1))
+        indices_no_next = setdiff(range(1, num_coords), valid_prev)
+
+        hankel_indices = []
+
+        for i in eachindex(indices_no_next)
+
+            if i == 1
+
+                hankel_indices = [hankel_indices; valid_prev[1:indices_no_next[i]-hankel_rank]]
+            else
+
+                hankel_indices = [hankel_indices; valid_prev[indices_no_next[i-1]-i+2:indices_no_next[i]-hankel_rank - i + 1]]
+            end
+        end
     end
-
-    # To replace in formulas:
-    valid_next = valid_prev .+ 1
-
-    # The idea now is to express the coordinates with no valid next values
-    # as a combination of known coordinates
 
     # we want shift_op * transpose(coords[valid_prev,:]) = transpose(coords[valid_next,:])
 
@@ -101,7 +122,6 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
     elseif alg == :dmd # exact dmd
 
         # Step 1: Compute the singular value decomposition of coords
-        # we throw away the first coordinate and put it back later
         U, S, V = svd(coords[:, valid_prev])
         #coords[:, valid_prev] = U*Diagonal(S)*V'
 
@@ -139,9 +159,13 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
 
     elseif alg == :hankel
 
-        hankel_dims = hankel_dims - 1 # another opportunity for dim reductions
+        #still needs to be rewritten for multiple episodes
 
-        wind = (num_coords - hankel_rank)
+        # the first coordinate holds no dynamical information, but it's useful for
+        # normalisation later in the prediction
+        hankel_dims = dims - 1 # another opportunity for dim reductions
+
+        wind = length(hankel_indices)
 
         rows = hankel_dims*hankel_rank + 1
 
@@ -153,15 +177,12 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
 
             if j == 1
 
-                UH[j:j + hankel_dims, :] = coords[1:hankel_dims+1, i+1:wind + i]
+                @views UH[j:j + hankel_dims, :] = coords[1:hankel_dims+1, hankel_indices .+ i]
 
                 j = j + hankel_dims + 1
             else
 
-                #= display(UH[j:j + hankel_dims - 1, :])
-                display(coords[2:hankel_dims, i+1:wind + i])
-                println(j) =#
-                UH[j:j + hankel_dims - 1, :] = coords[2:hankel_dims+1, i+1:wind + i]
+                @views UH[j:j + hankel_dims - 1, :] = coords[2:hankel_dims+1, hankel_indices .+ i]
 
                 j = j + hankel_dims
             end
@@ -172,12 +193,12 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
 
             if j == 1
 
-                H[j:j + hankel_dims, :] = coords[1:hankel_dims+1, i:wind + i - 1]
+                @views H[j:j + hankel_dims, :] = coords[1:hankel_dims+1, hankel_indices]
 
                 j = j + hankel_dims + 1
             else
 
-                H[j:j + hankel_dims - 1, :] = coords[2:hankel_dims+1, i:wind + i - 1]
+                @views H[j:j + hankel_dims - 1, :] = coords[2:hankel_dims+1, hankel_indices .+ (i - 1)]
 
                 j = j + hankel_dims
             end
@@ -219,6 +240,15 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
 
         shift_op = (Ur')*U_map
 
+    elseif alg == :GA
+
+        m = length(valid_next)
+
+        A = (1/(m))*coords[:, valid_next]*transpose(coords[:, valid_prev])
+        G = (1/(m))*coords[:, valid_prev]*transpose(coords[:, valid_prev])
+
+        shift_op = A/G
+
     end
 
     eigval, eigvec_r = eigen(shift_op)
@@ -228,23 +258,27 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
         # Step 4: The DMD modes are eigenvectors of the high-dimensional A matrix. The DMD
         # eigenvalues are also the eigenvalues of the full shift operator.
 
+        Phi= U_map*eigvec_r
+
         #= Phi = zeros(Complex, r+1, r+1)
         Phi[1] = 1
 
         Phi[2:end, 2:end] = U_map*eigvec_r =#
-        Phi= U_map*eigvec_r
-        lambda = Diagonal(eigval) #discrete time
+
+        #lambda = Diagonal(eigval) #discrete time
 
         #omega = log.(eigval)/timestep # continuous time DMD eigenvalues
 
         #x1 = coords[:,1]
         #b = Phi\x1 # tells you how much of each mode is going at each time
+        #b = Phi\H[:,1] # for hankel dmd
 
-        alpha1 = Sr*vec(Vr[1,:]')
-        b = (eigvec_r*lambda)\alpha1 # mode amplitude
+        #alpha1 = Sr*vec(Vr[1,:]')
+        #alpha1 = (Ur')*coords[:,1]
+        #b = (eigvec_r*lambda)\alpha1 # mode amplitude
 
         # A Φ = Λ Φ # the least square fit matrix
-        #shift_op = real.(Phi*lambda*pinv(Phi))
+        #shift_op = real.(Phi*lambda*pinv(Phi)) # bad idea if large
 
     end
 
@@ -257,7 +291,7 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
     # Now ensure the operator power does not blow up
     # Eigenvalues should have modulus less than 1...
 
-    if maximum(abs.(eigval)) > 1 && (alg != :hankel && alg != :dmd)
+    if maximum(abs.(eigval)) > (1 + 0.001) #&& (alg != :hankel && alg != :dmd)
 
         # ... but there may be numerical innacuracies, or irrelevant
         # component in the eigenbasis decomposition (the smaller eigenvalues
@@ -276,30 +310,60 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
 
         # reconstruct best approximation of the shift operator
 
-        Λ = Diagonal(eigval)
-        shift_op = real.((eigvec_r * Λ) * pinv(eigvec_r))
+        if !(alg == :dmd || alg == :hankel)
 
-        if return_eigendecomp
-
-            eigval, eigvec_r = eigen(shift_op)
+            shift_op = real.((eigvec_r * Diagonal(eigval)) * pinv(eigvec_r))
         end
+
     end
 
-    if return_eigendecomp && alg != :dmd
+    if alg == :dmd || alg == :hankel
 
-        eigvec_l = inv(eigvec_r) # may cause issues, i.e. slow
-        return shift_op, eigval, eigvec_l, eigvec_r
+        W = (eigvec_r*Diagonal(eigval))\(Ur') #Koopman eigenfunctions as rows
 
-    elseif alg == :dmd || alg == :hankel
-
-        #DMD = (Phi, [1;eigval], [1;b]) # DMD eigenvectors, eigenvalues, modes
-        DMD = (Phi, eigval, b) # DMD eigenvectors, eigenvalues, modes
+        DMD = (Phi, eigval, W) # DMD modes, eigenvalues, eigenfunctions
         SingleValueDecomposition = (U, S, V)
-        return shift_op, DMD, SingleValueDecomposition
+
+        if !residual
+
+            return DMD, SingleValueDecomposition
+        else
+
+            #shift_op = real(Phi*Diagonal(eigval)*W) #actual shift op
+
+            #=
+                If a large number of basis functions are used, then the condition number of
+                the problem might deteriorate. Another posibility is to compute the
+                residual. A large error indicates that the set of basis functions cannot
+                represent the eigenfunctions accurately. In the case of Hankel DMD, this may
+                happen when the trajectory of a continuous time system is sampled with a
+                short interval.
+            =#
+
+            if alg == :dmd
+
+                residual = norm(coords[:, valid_next] - real(Phi*Diagonal(eigval)*W)*coords[:, valid_prev])
+
+            else
+
+                residual = norm(UH - real(Phi*Diagonal(eigval)*W)*H)
+            end
+
+            return DMD, SingleValueDecomposition, residual
+
+        end
 
     else
 
-        return shift_op
+        if !return_eigendecomp
+
+            return shift_op
+
+        else
+            eigvec_l = pinv(eigvec_r)
+
+            return shift_op, eigval, eigvec_l, eigvec_r
+        end
 
     end
 end
@@ -311,7 +375,14 @@ function immediate_future(data, indices)
     return data[indices .+ 1, :]
 end
 
-function expectation_operator(coords, index_map, targets; func = immediate_future)
+function present(data, indices)
+    """
+    Equivalent to lambda d,i: d[i+1,:] . This function is used as a default argument in expectation_operator. See the documentation there.
+    """
+    return data[indices, :]
+end
+
+function expectation_operator(coords, index_map, targets; func = present, delay_coords = 1)
     """
     Builds the expectation operator, mapping a state distribution expressed in the eigenbasis, into numerical values, expressed in the original series units.
 
@@ -390,31 +461,114 @@ function expectation_operator(coords, index_map, targets; func = immediate_futur
     if func isa Vector
         f_list = func
     else
-        f_list = Array{Function, 1}(undef, length(targets_list))
-        f_list = fill!(f_list, func)
+
+        f_list = fill(func, length(targets_list))
     end
 
     eoplist = Vector{Matrix{Float64}}(undef, length(targets_list))
+    residual = Vector{Float64}(undef, length(targets_list))
 
-    rtol = sqrt(eps(real(float(one(eltype(coords))))))
-    sci = pinv(coords, rtol = rtol)
+    if delay_coords != 1
+
+        dims = size(coords, 1)
+        num_coords = size(coords, 2)
+
+        indices_no_next = setdiff(range(1, num_coords), deleteat!(collect(range(1, num_coords - 1)), findall(diff(index_map) .!= 1)))
+
+        indices = collect(range(1, num_coords))
+
+        new_indices = []
+
+        for i in eachindex(indices_no_next)
+
+            if i == 1
+
+                new_indices = [new_indices; indices[1:indices_no_next[i]-delay_coords + 1]]
+            else
+
+                new_indices = [new_indices; indices[indices_no_next[i-1] + 1:indices_no_next[i]-delay_coords + 1]]
+
+            end
+        end
+
+        #-----------------------------------------------------------------------------------
+
+        gap_locs = setdiff(indices, new_indices)
+
+        new_index_map = deleteat!(copy(index_map), gap_locs)
+
+        #-----------------------------------------------------------------------------------
+
+        delay_dims = dims - 1
+
+        wind = length(new_indices)
+
+        rows = delay_dims*delay_coords + 1
+
+        C = Array{Float64, 2}(undef, rows, wind) # coordinate matrix
+
+        j = 1
+        for i in 1:delay_coords
+
+            if j == 1
+
+                @views C[j:j + delay_dims, :] = coords[1:delay_dims+1, new_indices]
+
+                j = j + delay_dims + 1
+            else
+
+                @views C[j:j + delay_dims - 1, :] = coords[2:delay_dims+1, new_indices .+ (i - 1)]
+
+                j = j + delay_dims
+            end
+        end
+
+    end
 
     e_cnt = 1
 
     for (tar, fun) in zip(targets_list, f_list)
 
-        fvalues = fun(tar, index_map)
+        #=
+            We want to solve the least-squares problem:
 
-        valid_f = (findall(vec(prod(.!isnan.(fvalues), dims = 2))))
+            fvalues = E*coords
 
-        eoplist[e_cnt] = transpose(fvalues[valid_f,:]) * sci[valid_f,:]
+            and identify the best fit linear operator E that maps the causal state back to
+            the measurement space
+        =#
+
+        if delay_coords == 1
+
+            fvalues = fun(tar, index_map)
+
+            valid_f = (findall(vec(prod(.!isnan.(fvalues), dims = 2))))
+
+            eoplist[e_cnt] = transpose(transpose(coords[:,valid_f]) \ (fvalues[valid_f,:]))
+            #eoplist[e_cnt] = transpose(fvalues[valid_f,:]) * pinv(coords[:,valid_f])
+
+            residual[e_cnt] = norm(eoplist[e_cnt]*coords[:,valid_f] .- transpose(fvalues[valid_f,:]))
+
+        else
+
+            fvalues = fun(tar, new_index_map .+ (delay_coords - 1))
+            # if this ofset is greater than npast or nfuture there may be issues
+
+            valid_f = (findall(vec(prod(.!isnan.(fvalues), dims = 2))))
+
+            eoplist[e_cnt] = transpose(transpose(C[:,valid_f]) \ (fvalues[valid_f,:]))
+
+            residual[e_cnt] = norm(eoplist[e_cnt]*C[:,valid_f] .- transpose(fvalues[valid_f,:]))
+
+        end
+
         e_cnt += 1
     end
 
-    return eoplist
+    return eoplist, residual
 end
 
-function predict(npred, coords_ic, expect_op; return_dist = 2, bounds = nothing, knn_convexity = nothing, coords = nothing, knndim = nothing, extent = nothing, DMD = nothing, shift_op = nothing)
+#= function predict(npred, coords_ic, expect_op; return_dist = 2, bounds = nothing, knn_convexity = nothing, coords = nothing, knndim = nothing, extent = nothing, DMD = nothing, shift_op = nothing)
     """
     Predict values from the current causal states distribution
 
@@ -502,27 +656,33 @@ function predict(npred, coords_ic, expect_op; return_dist = 2, bounds = nothing,
 
     if !isnothing(DMD)
 
-        Phi = DMD[1]
+        Phi = DMD[1] # DMD modes / projected Koopman right eigenvectors
         Λ = Diagonal(DMD[2]) #discrete time eigenvalues
         Λm = copy(Λ)
-        #b = DMD[3]
+        #b = DMD[3] # DMD mode amplitudes, coefficients of Koopman eigenfunctions
 
         if size(DMD[2], 1) != size(coord, 1)
 
             # we're using hankel dmd
-            #b = Phi\vec(coords_ic[:, end:-1:1])
-            #b = Phi\vec(coords_ic[:, :])
+            hankel_coord = [1; vec(coords_ic[2:end, 1:end])]
+
             hankel_rank = (length(DMD[2]) /size(coord, 1))
 
             #= if length(vec(coords_ic[:, end:-1:1])) != size(Phi, 1)
                 #warning
             end =#
-            b = DMD[3]
+            # mode amplitudes, i.e. the coordinates of x(0) in the base defined by the eigenvectors.
+
+            #b = pinv(Phi)*hankel_coord
+            #b = Phi\hankel_coord
+            b = (DMD[3]*Λ)\((DMD[4]')*hankel_coord) # projected Koopman eigenfunction coefficients
 
         else
 
-            #b = DMD[3]
-            b = Phi\coord
+            #b = pinv(Phi)*coord
+            #b = Phi\coord
+            #b = (Phi*Λ)\((DMD[3]')*coord) # projected Koopman eigenfunction coefficients
+            b = (DMD[3]*Λ)\((DMD[4]')*coord) # projected Koopman eigenfunction coefficients
         end
     end
 
@@ -719,6 +879,172 @@ function predict(npred, coords_ic, expect_op; return_dist = 2, bounds = nothing,
     end
 
     return pred
+end =#
+
+function predict(npred, coords_ic, expect_op; return_dist = 2, DMD = nothing, shift_op = nothing)
+    """
+    Predict values from the current causal states distribution
+
+    Parameters
+    ----------
+    npred : int
+        Number of predictions to generate
+
+    state_dist : array of size (num_basis, 1)
+        Current state distribution, expressed in the eigen basis
+
+    shift_op : array of size (num_basis, num_basis)
+        Operator to evolve the distributions in time
+
+    expect_op : array of size (data_dim, num_basis) or a list of such arrays
+        Operator, or list of operators, that take a distribution of causal states and generate a data value compatible with the original series
+
+    return_dist : {0, 1, 2}, optional
+        Whether to return the state distribution, or update it:
+        - 0 (default): do not return a state vector
+        - 1: return the updated state vector
+        - 2: return an array of state_dist vectors, one row for each prediction
+
+    Returns
+    -------
+    predictions: array, or list of arrays, matching the expect_op type
+        As many series of npred values as there are expectation operators.
+        Either a list, or a single array, matching the expect_op type
+
+    updated_dist: optional, array
+        If return_dist > 0, the updated state distribution or all such distributions
+        are returned as a second argument.
+
+    Notes
+    -----
+
+    The causal state space (conditional distributions) is not convex: linear combinations of
+    causal states do not necessarily correspond to a valid value in the conditionned domain.
+    We are dealing here with distributions of causal states, but these distributions are
+    ultimately represented as linear combinations of the data span in a Reproducing Kernel
+    Hilbert Space, or, in this case, as combinations of eigenbasis vectors (themselves
+    represented in RKHS). Therefore, the state distributions are also linear combinations of
+    other causal states. Ultimately, the continuous-time model converges to a limit
+    distribution, which is an average distribution that need not correspond to any single
+    state, so the non-convexity is not an issue for that limit distribution. Making
+    predictions with the expectation operator is still feasible, and we get the expected
+    value from the limit distribution as a result.
+
+    If, instead, one wants a trajectory, and not the limit average, then a method is
+    required to ensure that each predicted state remains valid as a result of applying a
+    linear shift operator. The Nearest Neighbours method is an attempt to solve this issue.
+    The preimage issue is a recurrent problem in machine learning and no single answer can
+    currently solve all cases.
+
+    """
+
+    coord = copy(coords_ic)[:, end] # the sequence leading up to the most recent initial condition
+
+    c_dims = size(coord, 1) # dimension of a causal state
+
+    eo_len = length(expect_op)
+    eop_dims = length(expect_op[1]) # dimension of the expectation operator
+    eop_rank = Int(round.((eop_dims - 1) / (c_dims - 1), digits = 0))
+
+    hankel_rank = Int(round.((size(DMD[1], 1) - 1) / (c_dims - 1), digits = 0))
+
+    pred_coords = Array{Float64, 2}(undef, c_dims, npred)
+
+    pred = [Vector{Float64}(undef, npred) for _ = 1:eo_len]
+
+    if !isnothing(DMD)
+
+        Phi = DMD[1] # projected Koopman left eigenvectors
+        Λ = Diagonal(DMD[2]) #discrete time eigenvalues
+        #W = DMD[3] # DMD mode amplitudes, coefficients of Koopman eigenfunctions
+
+        Λm = copy(Λ) # the only matrix that changes with the evolution
+
+        if ((size(DMD[1], 1) - 1) % (c_dims - 1)) == 0
+
+            # we're using hankel dmd
+            hankel_coord = [1; vec(coords_ic[2:end, end - hankel_rank + 1:end])]
+
+            #b = pinv(Phi)*hankel_coord #b = Phi\hankel_coord
+
+            # projected Koopman eigenfunction coefficients
+            # mode amplitudes, i.e. the coordinates of x(0) in the base defined by the eigenvectors.
+            b = (DMD[3])*hankel_coord
+
+        else
+
+            b = (DMD[3])*coord
+        end
+    end
+
+    if hankel_rank < eop_rank
+
+        eop_coord = [1; vec(coords_ic[2:end, 1:eop_rank])]
+
+    end
+
+    for p in 1:npred
+
+        # Evolve the distribution
+
+        if isnothing(DMD)
+            coord = shift_op * coord
+
+        else
+
+            coord = real(Phi*(Λm)*b)
+            Λm = Λm*Λ
+
+        end
+
+        # Normalize - to prevent numerical errors from accumulating
+        coord /= coord[1, 1]
+
+        # Apply the expectation operator to make a prediction in measurement space
+
+        for (eidx, eop) in enumerate(expect_op)
+
+            if hankel_rank == eop_rank
+
+                pred[eidx][p] = (eop * coord)[1]
+
+            elseif hankel_rank > eop_rank
+
+                # if the present function is used to construct the expectation operator,
+                # then the measurement values will lag by 'hankel_rank - eop_rank'
+
+                #pred[eidx][p] = (eop * coord[1:eop_dims])[1]
+                pred[eidx][p] = (eop * [1.0; coord[end - eop_dims + 2:end]])[1]
+
+            elseif hankel_rank < eop_rank
+
+                #@views eop_coord[2:end] =
+
+                pred[eidx][p] = (eop * eop_coord)[1]
+
+            end
+
+        end
+
+        # saving
+        if return_dist == 2
+
+            #pred_coords[:, p] = coord[1:c_dims]
+            pred_coords[:, p] = [1.0; coord[end - c_dims + 2:end]]
+        end
+
+    end
+
+    if return_dist == 1
+
+        return pred, coord
+
+    elseif return_dist == 2
+
+        return pred, pred_coords
+    end
+
+    return pred
 end
 
 """
@@ -761,7 +1087,7 @@ function new_coords(Ks, Gs, coords; alg = :nnls)
         Ω = copy(Ks)
         ldiv!(bunchkaufman(Gs), Ω) # Gs \ Ks
 
-    else
+    elseif alg == :nnls
 
         # Note that the Non-Negative constraint is enough in this case,
         # Since the solution sums to 1 with the diagonal entries in Gs

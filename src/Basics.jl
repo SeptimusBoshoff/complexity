@@ -92,26 +92,26 @@ mutable struct Parse_Tree
         and from this construct the tree with links up to level D that are labeled
         with individual symbols up to that time. We refer to length D subsequences
         as D-cylinders. Hence an D level tree has a length D path corresponding to
-        each distinct observed D-cylinder. That is, we refer to length D subsequences 
-        as D-cylinders. Hence an D level tree has a length D path corresponding to each 
-        distinct name for that bundle of underlying process's orbits each of which 
-        visited the sequence of measurement partition elements indexed by the D-cylinder. 
-        The basic assumption in building a tree is that symbol sequences observed at 
-        different times in the data stream approximate the same process state. Nonstationary 
+        each distinct observed D-cylinder. That is, we refer to length D subsequences
+        as D-cylinders. Hence an D level tree has a length D path corresponding to each
+        distinct name for that bundle of underlying process's orbits each of which
+        visited the sequence of measurement partition elements indexed by the D-cylinder.
+        The basic assumption in building a tree is that symbol sequences observed at
+        different times in the data stream approximate the same process state. Nonstationary
         processes are examples for which this assumption fails.
 
-        The tree is built usin a sliding window to move through the data stream. It 
-        captures in this way the distinct sequences and summarises their occurrence at 
-        different points in the data stream via a count or probability. That is, we refer to length D subsequences 
-        as D-cylinders. Hence an D level tree has a length D path corresponding to each 
-        distinct name for that bundle of underlying process's orbits each of which 
-        visited the sequence of measurement partition elements indexed by the D-cylinder. 
-        The basic assumption in building a tree is that symbol sequences observed at 
-        different times in the data stream approximate the same process state. Nonstationary 
+        The tree is built usin a sliding window to move through the data stream. It
+        captures in this way the distinct sequences and summarises their occurrence at
+        different points in the data stream via a count or probability. That is, we refer to length D subsequences
+        as D-cylinders. Hence an D level tree has a length D path corresponding to each
+        distinct name for that bundle of underlying process's orbits each of which
+        visited the sequence of measurement partition elements indexed by the D-cylinder.
+        The basic assumption in building a tree is that symbol sequences observed at
+        different times in the data stream approximate the same process state. Nonstationary
         processes are examples for which this assumption fails.
 
-        The tree is built usin a sliding window to move through the data stream. It 
-        captures in this way the distinct sequences and summarises their occurrence at 
+        The tree is built usin a sliding window to move through the data stream. It
+        captures in this way the distinct sequences and summarises their occurrence at
         different points in the data stream via a count or probability.
 
         1. Get sequence of past D symbols
@@ -119,33 +119,33 @@ mutable struct Parse_Tree
         number Ni(L) of occurrences of the associated L-cylinder relative to the
         total number N(L) observed.
 
-        A partition is "generating" if sufficiently long binary sequences come from 
-        arbitrarily small invervals of initial conditions. If the partition is generating 
-        the resulting binary sequences capture the statistical properties of the map. 
-        In other words, there is a one-to-one mapping between infinite binary sequences and 
-        almost all points on the attractor. 
+        A partition is "generating" if sufficiently long binary sequences come from
+        arbitrarily small invervals of initial conditions. If the partition is generating
+        the resulting binary sequences capture the statistical properties of the map.
+        In other words, there is a one-to-one mapping between infinite binary sequences and
+        almost all points on the attractor.
 
         This partition is generating and the resulting binary sequences completely
         capture the statistical properties of the Logistic map. In other words, there is
         a one-to-one mapping between infinite binary sequences and almost all points on
         the attractor.
 
-        The generating partition is defined as a partition for which the topological 
-        entropy achieves its supremum. 
+        The generating partition is defined as a partition for which the topological
+        entropy achieves its supremum.
 
-        A tree machine is a subclass of finite-state automata with stochastic emission 
-        probabilities and deterministeic state and deterministic state transitions, given 
-        an emitted symbol. One follows recent symbols (the context) down the tree (deeper 
-        corresponding to more ancient symbols) and upon matching a terminal node, defines 
-        the state. The state emits independent symbols with a certain distribution. A 
-        tree with all nodes at depth D is a D-order Markov chain. 
+        A tree machine is a subclass of finite-state automata with stochastic emission
+        probabilities and deterministeic state and deterministic state transitions, given
+        an emitted symbol. One follows recent symbols (the context) down the tree (deeper
+        corresponding to more ancient symbols) and upon matching a terminal node, defines
+        the state. The state emits independent symbols with a certain distribution. A
+        tree with all nodes at depth D is a D-order Markov chain.
 
-        The nontrivial issue, is estimating a suitable topolgy for the data, as that directly 
-        addresses the complexity versus predictability issue, whether to use a shallow tree 
-        whose nodes collect more data and hence are better local estimators or to use a deeper 
-        tree because it is necessary to distinguish distinct states recognizable from the data. 
-        There are 2^2^D topologies of binary trees with maximum depth no larger than D; for any but 
-        the smallest D, choosing among them would appear to be prohibitively expensive. 
+        The nontrivial issue, is estimating a suitable topolgy for the data, as that directly
+        addresses the complexity versus predictability issue, whether to use a shallow tree
+        whose nodes collect more data and hence are better local estimators or to use a deeper
+        tree because it is necessary to distinguish distinct states recognizable from the data.
+        There are 2^2^D topologies of binary trees with maximum depth no larger than D; for any but
+        the smallest D, choosing among them would appear to be prohibitively expensive.
     =#
 
     Nodes::Vector{Node}
@@ -203,7 +203,7 @@ mutable struct ϵ_Machine
         The algebra generated by the ϵ-machine is a semi-group with an identity element,
         i.e., it is a monoid. Due to this, ϵ-machines can be interpreted as capturing
         a process's generalized symmmetries. Any subgroups of an ϵ-machine's semi-group
-        are, in fact, symmetries in the usual sense. 
+        are, in fact, symmetries in the usual sense.
 
         The fact that machine reconstruction uses observational data makes it similar
         to neural networks when finding a causal pattern in data, except that in the
@@ -215,7 +215,7 @@ mutable struct ϵ_Machine
         reflects the causal structure of the process.
 
         ϵ Machine reconstruction deduces from the diversity of individual temporal
-        patterns "generalized states", associated with the graph vertices, that are 
+        patterns "generalized states", associated with the graph vertices, that are
         optimal for forecasting. The topological ϵ-machines so reconstructed capture
         the essential computational aspects of the data stream by virtue of Occam's razor.
 
@@ -261,14 +261,14 @@ mutable struct ϵ_Machine
         probability. That is, two states are in the same equivalence class, if their
         subtrees adhere to a similarity relation.
 
-        The meaning of a measurement is the selected morph, the distribution associated 
-        with the causal state to which the agent transitions, and the degree of meaning 
-        is determined by the latter's probability. That is, it is the information flow 
+        The meaning of a measurement is the selected morph, the distribution associated
+        with the causal state to which the agent transitions, and the degree of meaning
+        is determined by the latter's probability. That is, it is the information flow
         towards the new causal state.
 
-        The meaning of a measurement is the selected morph, the distribution associated 
-        with the causal state to which the agent transitions, and the degree of meaning 
-        is determined by the latter's probability. That is, it is the information flow 
+        The meaning of a measurement is the selected morph, the distribution associated
+        with the causal state to which the agent transitions, and the degree of meaning
+        is determined by the latter's probability. That is, it is the information flow
         towards the new causal state.
 
         The state-to-state transition structure is obtained by looking at how the
@@ -302,7 +302,7 @@ mutable struct ϵ_Machine
         ϵ-Machine reconstruction deduces from the diversity of individual patterns in
         data stream "generalised states", the morphs, associated with the graph vertices,
         that are optimal for forecasting. The topological ϵ-machines so reconstructed capture
-        the estial computational aspects of the data stream by firtue of Occam's razor. A 
+        the estial computational aspects of the data stream by firtue of Occam's razor. A
         morph is a set of cylinders.
     =#
 
@@ -318,7 +318,7 @@ mutable struct ϵ_Machine
     x::Array{Float64, 2} # input data
     x_m::Array{Float64, 2} # State space machine representation of symbols
     t_m::StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}, Int64} # Machine time
- 
+
     C_states::Matrix{Int64} #Nodes, and macro checks
     start_state::Int64
     Dang_States::Vector{Int64}
@@ -331,7 +331,7 @@ mutable struct ϵ_Machine
     l_eigvecs::Matrix{ComplexF64} # left eigenvectors
     D::Matrix{ComplexF64} # diagonal matrix
     pv::Vector{Float64} # stationary state probability distribution
-    
+
     α::StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}, Int64}
 
     Tα::Vector{Matrix{Float64}} # paramatrized stochastic connection matrix of order α - perturbed matrix, αth Hadamar power of T - perturbed matrix, αth Hadamar power of T
@@ -347,7 +347,7 @@ mutable struct ϵ_Machine
     hα::Vector{Float64} # Renyi specific entropy, i.e. entropy per measurement
     Cα::Vector{Float64} # α-order graph complexity
     Cαe::Vector{Float64} # α-order asymptotic transition edge complexity
-    
+
     Cμ_t::Vector{Float64} # Time Series of Statistical Complexity
     h::Float64 # Topological Entropy
     hμ::Float64 # Entropy rate - growth rate of Shannon information in subsequences
@@ -356,7 +356,7 @@ mutable struct ϵ_Machine
     Ce::Float64 # Transition topological Complexity
     Cμe::Float64 # Statistical Edge Complexity
 
-    Hpe::Vector{Float64} # normalised permutation entropy 
+    Hpe::Vector{Float64} # normalised permutation entropy
     hpe::Vector{Float64} # normalised permutation entropy per symbol
 
     function ϵ_Machine(Ts::Vector{Matrix{Float64}}, Tree::Parse_Tree,
@@ -365,23 +365,23 @@ mutable struct ϵ_Machine
         C_states::Matrix{Int64}, start_state::Int64, Dang_States::Vector{Int64}, IG::Float64,
         T::Matrix{Float64}, I::Matrix{Float64}, eigval::Vector{ComplexF64},
         r_eigvecs::Matrix{ComplexF64}, l_eigvecs::Matrix{ComplexF64},
-        D::Matrix{ComplexF64}, pv::Vector{Float64}, 
+        D::Matrix{ComplexF64}, pv::Vector{Float64},
         α::StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}, Int64},
-        Tα::Vector{Matrix{Float64}}, Iα::Vector{Matrix{Float64}}, 
-        eigval_α::Vector{Vector{ComplexF64}}, r_eigvecs_α::Vector{Matrix{ComplexF64}}, 
+        Tα::Vector{Matrix{Float64}}, Iα::Vector{Matrix{Float64}},
+        eigval_α::Vector{Vector{ComplexF64}}, r_eigvecs_α::Vector{Matrix{ComplexF64}},
         l_eigvecs_α::Vector{Matrix{ComplexF64}}, Dα::Vector{Matrix{ComplexF64}}, pv_α::Vector{Vector{Float64}},
-        Zα::Vector{Float64}, Hα::Vector{Float64}, hα::Vector{Float64}, Cα::Vector{Float64}, Cαe::Vector{Float64}, 
+        Zα::Vector{Float64}, Hα::Vector{Float64}, hα::Vector{Float64}, Cα::Vector{Float64}, Cαe::Vector{Float64},
         Cμ_t::Vector{Float64}, h::Float64, hμ::Float64, C::Float64, Cμ::Float64, Ce::Float64, Cμe::Float64,
-        Hpe::Vector{Float64}, hpe::Vector{Float64})     
+        Hpe::Vector{Float64}, hpe::Vector{Float64})
 
         new(Ts, Tree, δ, μ_m, ϵ, x_range, k,
         s, x, x_m, t_m,
         C_states, start_state, Dang_States, IG,
-        T, I, eigval, 
-        r_eigvecs, l_eigvecs, D, pv,  
+        T, I, eigval,
+        r_eigvecs, l_eigvecs, D, pv,
         α,
-        Tα, Iα, 
-        eigval_α, r_eigvecs_α, l_eigvecs_α, 
+        Tα, Iα,
+        eigval_α, r_eigvecs_α, l_eigvecs_α,
         Dα, pv_α,
         Zα, Hα, hα, Cα, Cαe,
         Cμ_t, h, hμ, C, Cμ, Ce, Cμe,
@@ -401,7 +401,7 @@ mutable struct ϵ_Machine
         μ_m = round(μ_m/μ_s)*μ_s # correction to prevent overflow of vectors
         k = 0 # machine step
         t_final = N*μ_s - μ_s
-        
+
         N = convert(Int64, Int(ceil(N*μ_s/μ_m)))
 
         dim = length(ϵ)
@@ -430,7 +430,7 @@ mutable struct ϵ_Machine
 
         α = 0:0.1:1.0
         lα = length(α)
- 
+
         Tα = Vector{Matrix{Float64}}(undef, lα)
         Iα = Vector{Matrix{Float64}}(undef, lα)
         eigval_α = Vector{Vector{ComplexF64}}(undef, lα)
@@ -458,11 +458,11 @@ mutable struct ϵ_Machine
         ϵ_Machine(Ts, Tree, δ, μ_m, ϵ, x_range, k,
         s, x, x_m, t_m,
         C_states, start_state, Dang_States, IG,
-        T, I, eigval, 
-        r_eigvecs, l_eigvecs, D, pv,  
+        T, I, eigval,
+        r_eigvecs, l_eigvecs, D, pv,
         α,
-        Tα, Iα,  
-        eigval_α, r_eigvecs_α, l_eigvecs_α, 
+        Tα, Iα,
+        eigval_α, r_eigvecs_α, l_eigvecs_α,
         Dα, pv_α,
         Zα, Hα, hα, Cα, Cαe,
         Cμ_t, h, hμ, C, Cμ, Ce, Cμe,
@@ -500,31 +500,31 @@ function Partitioning(Deus::ϵ_Machine, x)
         probes required by the instrument. The (unknowable) exact states of the
         observed system are translated into a sequence of symbols via a measurement
         channel. This process is described by a parametrized partition of the state
-        space. A generating partition requires infinite sequences of cell indices 
-        to be in a finite-to-one correspondence with the process's states. The notion 
-        of generating partitions gives an operational definition of a good instrument 
+        space. A generating partition requires infinite sequences of cell indices
+        to be in a finite-to-one correspondence with the process's states. The notion
+        of generating partitions gives an operational definition of a good instrument
         that is useful if the instrument can be altered. For an instrument with a
-        generating partition Shannon's noiseless coding theorem says that the measurement 
-        channel must have a capacity higher than the process's entropy rate. A theorem 
-        of Kolmogorov says that the entropy rate is maximised for a given process if 
+        generating partition Shannon's noiseless coding theorem says that the measurement
+        channel must have a capacity higher than the process's entropy rate. A theorem
+        of Kolmogorov says that the entropy rate is maximised for a given process if
         partition is generating.
 
-        The notion of generating partition in symbolic dynamics is based on the "splitting" 
-        of the phase space in terms of measureable sets. 
+        The notion of generating partition in symbolic dynamics is based on the "splitting"
+        of the phase space in terms of measureable sets.
 
-        The theory of symbolic dynamics is a tool for the investigation of discrete time 
-        dynamical systems. The main idea is that of a partitio, that is a finite collection 
-        of disjoint subsets whose union is the state space. By identifying each point 
-        in the state space with a unique symbol, we have a sequence of symbols that correspond 
-        to each trajectory of the original system - the sequence is produced as the evolving state 
-        visits different regions of the partition. This idea is at its most powerful 
-        when the partition is chosen to be generating, that is, when the assingment of symbol 
-        sequences to trajectories is unique, up to a set of measure zero. 
+        The theory of symbolic dynamics is a tool for the investigation of discrete time
+        dynamical systems. The main idea is that of a partitio, that is a finite collection
+        of disjoint subsets whose union is the state space. By identifying each point
+        in the state space with a unique symbol, we have a sequence of symbols that correspond
+        to each trajectory of the original system - the sequence is produced as the evolving state
+        visits different regions of the partition. This idea is at its most powerful
+        when the partition is chosen to be generating, that is, when the assingment of symbol
+        sequences to trajectories is unique, up to a set of measure zero.
 
-        When the partition is a generating partition, the original dyanmics and the 
+        When the partition is a generating partition, the original dyanmics and the
         symbol dynamics are conjugate, (i.e. acting or operating as if joined).
 
-        A partition which always yields a reduction in uncertainty as to the exact microstate 
+        A partition which always yields a reduction in uncertainty as to the exact microstate
         given increasing coarse-grained measurements, is known as a generating partition.
     =#
 
@@ -580,7 +580,7 @@ function Sampling(Deus::ϵ_Machine, μ_s)
         if i%round(Deus.μ_m/μ_s) == 0
 
             Deus.k = Deus.k + 1
-  
+
             #Deus.s[Deus.k], _ = Partitioning(Deus, Deus.x[:, i])
             #Deus.x_m[:, Deus.k] = Dimensioning(Deus, Deus.s[Deus.k])
 
@@ -692,14 +692,14 @@ function Cylinder_Volumes(Deus::ϵ_Machine, m)
         if size(Deus.Tree.Cyls[i], 1) == 1 # this is a point
 
             Deus.Tree.C_vols = [Deus.Tree.C_vols; 0.0]
-    
+
         elseif size(Deus.x, 1) == 1 # these are scalar values
 
             Deus.Tree.C_vols = [Deus.Tree.C_vols; (maximum(Cyls[i]) - minimum(Cyls[i]))]
 
         elseif size(Deus.Tree.Cyls[i], 1) == 2 # these is a line
 
-            Deus.Tree.C_vols = [Deus.Tree.C_vols; 
+            Deus.Tree.C_vols = [Deus.Tree.C_vols;
             norm(Deus.x[:, m + Deus.Tree.Cyls[i][1]] .- Deus.x[:, m + Deus.Tree.Cyls[i][2]])]
 
         elseif size(Deus.Tree.Cyls[i], 1) > 2
@@ -727,14 +727,14 @@ function Symbolic_Shadowing(Deus::ϵ_Machine)
     m_start = 2
 
     iter = 1
-        
+
     m_opt = m_start
     H_min = 0.0
 
     count = Vector{Int64}(undef, 3)
 
     while iter <= max_iter
-  
+
         Deus.Tree = Parse_Tree(N, D, m_opt, H_min) # initialising an empty tree
 
         for i in 1:Deus.k - Deus.Tree.D + 1
@@ -874,7 +874,7 @@ function Tree_Isomorphism(Deus::ϵ_Machine; Ancest::Vector{Int64} = [1], d = 0)
 
             sum_child = 1
             if ancest_branches > 0
-                for j in 1:num_children  
+                for j in 1:num_children
 
                     dist = [dist; sorted_Pr_c[j].*child_morph_dist[sum_child:sum_child + child_branches[j] - 1]]
                     sum_child = sum_child + child_branches[j]
@@ -949,7 +949,7 @@ function Reconstruction(Deus::ϵ_Machine, Node)
                     state_cn = Deus.Tree.Nodes[Deus.C_states[1, n]].cn
                     node_cn = Deus.Tree.Nodes[Node].cn
 
-                    if  χ2_test(state_dist, node_dist, state_cn, node_cn; α = Deus.δ) # Pr_d <= Deus.δ # 
+                    if  χ2_test(state_dist, node_dist, state_cn, node_cn; α = Deus.δ) # Pr_d <= Deus.δ #
 
                         flag = 1 # don't create new causal state
                         Deus.Tree.Nodes[Node].state = Deus.Tree.Nodes[Deus.C_states[1, n]].state
@@ -964,8 +964,8 @@ function Reconstruction(Deus::ϵ_Machine, Node)
                         Deus.Tree.Nodes[Deus.C_states[1, n]].cn = cn_total
 
                         # making sure start state appears in table
-                        if Node == 1 
-                            
+                        if Node == 1
+
                             Deus.C_states[1, n] = 1
                             Deus.C_states[2, n] = 0
                             Deus.Tree.Nodes[1].morph_dist = Deus.Tree.Nodes[Deus.C_states[1, n]].morph_dist
@@ -980,7 +980,7 @@ function Reconstruction(Deus::ϵ_Machine, Node)
                         state_test = Deus.Tree.Nodes[Deus.C_states[1, n]].generation - Deus.Tree.D + Deus.Tree.L # state is at bottom
 
                         if state_test == 0 && Deus.Ts[Deus.Tree.Nodes[Node].state][2, 1] == -1
-                            
+
                             Add_Transitions(Deus, Node, n, num_children, overwrite = 1)
 
                         elseif state_test <= 0 && 1 == 2
@@ -996,7 +996,7 @@ function Reconstruction(Deus::ϵ_Machine, Node)
                                 comp_state = Deus.Tree.Nodes[child_locs[c]].state
 
                                 if comp_state != 0
-                                    
+
                                     comp_val = Deus.Tree.Nodes[child_locs[c]].value
                                     found_states = findall(x->x == comp_state, trans_states)
 
@@ -1103,11 +1103,11 @@ function Parametric_Statistical_Mechanics(Deus::ϵ_Machine)
         num_trans = length(Deus.Ts[v][1,:])
 
         #normalise probabilities - only necessary if IG does not vanish
-        pt = sum(Deus.Ts[v][3, :])  
+        pt = sum(Deus.Ts[v][3, :])
         if pt != 1
             Deus.Ts[v][3, :] =  Deus.Ts[v][3, :]./pt
-        end  
-        
+        end
+
         for vd in axes(trans, 2)
 
             vloc = findall(i -> all(j -> trans[:, vd][j] == Deus.Ts[v][1:2, :][j,i], 1:2), 1:num_trans)
@@ -1151,20 +1151,20 @@ function Parametric_Statistical_Mechanics(Deus::ϵ_Machine)
                     Deus.Zα[id] = Deus.Zα[id] + sum(psn.^α) #sum(exp.(α.*log.(psn)))
 
                         if α == 1
-                            
+
                             sum_psn = sum(psn.*log.(2, psn))
 
                         if isnan(sum_psn)
                             locs = findall( !=(0), psn) # remove all zeros
                             sum_psn = sum(psn[locs].*log.(psn[locs]))
-                        end  
+                        end
 
                             Deus.Hα[id] = Deus.Hα[id] - sum_psn
 
-                        Deus.Cα[id] = Deus.Cα[id] - Deus.pv_α[id][v]*log(2, Deus.pv_α[id][v])  
-                           
+                        Deus.Cα[id] = Deus.Cα[id] - Deus.pv_α[id][v]*log(2, Deus.pv_α[id][v])
+
                     else
-                        Deus.Cα[id] = Deus.Cα[id] + (Deus.pv_α[id][v])^α 
+                        Deus.Cα[id] = Deus.Cα[id] + (Deus.pv_α[id][v])^α
                         #Deus.Hα[id] = Deus.Hα[id] + sum(psn.^α) # as a check
                     end
 
@@ -1187,10 +1187,10 @@ function Parametric_Statistical_Mechanics(Deus::ϵ_Machine)
                         pe = Deus.pv_α[id][v]*pt
 
                         if α == 1
-    
+
                             Deus.hα[id] = Deus.hα[id] - pe*log(2, pt)
                             Deus.Cαe[id] = Deus.Cαe[id] - pe*log(2, pe)
-                            
+
                             sym = Deus.Ts[v][2, vd]
                             sloc = findfirst( ==(sym), syms)
 
@@ -1217,7 +1217,7 @@ function Parametric_Statistical_Mechanics(Deus::ϵ_Machine)
                 Deus.Cαe[id] = ((1 - α)^-1)*log(2, Deus.Cαe[id])
                 Deus.Cα[id] = ((1 - α)^-1)*log(2, Deus.Cα[id])
             end
-        end    
+        end
     end
 
     println("\n____________________________________________________")
@@ -1238,11 +1238,11 @@ function Statistical_Mechanics(Deus::ϵ_Machine)
     #=
         Many of the important properties of stocahstic automate models are given concisely
         using a statistical mechanical formalism that describes the coarse-grained scaling
-        of orbit space. 
+        of orbit space.
 
-        In a Markov chain we may distinguis h between two subsets of vertices. The first 
-        Vt consists of those associated with transient states; the second Vr, consists 
-        of recurrent states. 
+        In a Markov chain we may distinguis h between two subsets of vertices. The first
+        Vt consists of those associated with transient states; the second Vr, consists
+        of recurrent states.
 
         One useful reduction of an ϵ-Machine is to ask for its equivalent Markov
         process, which can be described by a stochastic connection matrix containing
@@ -1279,16 +1279,16 @@ function Statistical_Mechanics(Deus::ϵ_Machine)
         variable can depend on are restricted to only its direct predecessor the
         stochastic process is called a Markov chain or a Markov process.
 
-        A simple example of a stochastic process with dependence is one in which each 
+        A simple example of a stochastic process with dependence is one in which each
         random variable depends on the one preceding it and is conditionally independent
         of all the other preceding random variables. Such a process is said to be Markov.
         The Markov chain is said to be time invariant if the conditional probability p(xn+1|xn)
-        does not depend on n, i.e., for n = 1, 2, ... If it is possible to go with positive 
-        probability from any state of the Markov chain to any other state in a finite number 
-        of steps, then the Markov chain is said to be irreducible. 
+        does not depend on n, i.e., for n = 1, 2, ... If it is possible to go with positive
+        probability from any state of the Markov chain to any other state in a finite number
+        of steps, then the Markov chain is said to be irreducible.
 
         A distribution on the states such that the distribution at time n + 1 is the same as the
-        distribution at time n is called a stationary distribution. The stationary distribution is 
+        distribution at time n is called a stationary distribution. The stationary distribution is
         so called because if the initial state of a Markov chain is drawn according to a stationary
         distribution, then the Markov chain forms a stationary process.
 
@@ -1298,22 +1298,22 @@ function Statistical_Mechanics(Deus::ϵ_Machine)
 
         If we have a sequence of n random variables, a natural question to ask is "how does the
         entropy of the sequence grow with n. When the entropy rate exists in the limit, then
-        we can define a related quantity for the entropy rate, which is a different notion 
-        of entropy. The first is the per symbol entropy of the n random variables, and 
-        the second is the conditional entropy of the last random variable given the past. For 
-        stationary processes the limits exists in both cases and they are equal. The significance 
+        we can define a related quantity for the entropy rate, which is a different notion
+        of entropy. The first is the per symbol entropy of the n random variables, and
+        the second is the conditional entropy of the last random variable given the past. For
+        stationary processes the limits exists in both cases and they are equal. The significance
         of the entropy rate of a stochastic process arises from the Asymptotic Equipartition Property
         for a stationary ergodic process. The entropy rate is particularly well defined and easy
-        to calculate for the stationary distribution of Markov chains, because if the Markov chain 
-        is irreducible and aperiodic, then it has a unique stationary distribution on the states, 
-        and any initial distribution tends to the stationary distribution as n -> ∞. In this case, 
-        even though the initial distribution is not the stationary distribution, the entropy rate, 
-        which is defined in terms of long term behaviour can be expressed with respect to the 
+        to calculate for the stationary distribution of Markov chains, because if the Markov chain
+        is irreducible and aperiodic, then it has a unique stationary distribution on the states,
+        and any initial distribution tends to the stationary distribution as n -> ∞. In this case,
+        even though the initial distribution is not the stationary distribution, the entropy rate,
+        which is defined in terms of long term behaviour can be expressed with respect to the
         stationary distribution.
 
-        It is easy to see that a stationary random walk on a graph is time-reversible, that is, 
+        It is easy to see that a stationary random walk on a graph is time-reversible, that is,
         the probability of any sequence of state is the same forward or backward. Rather surprisingly,
-        the converse is also true, that is, any time-reversible Markov chain can be represented as a 
+        the converse is also true, that is, any time-reversible Markov chain can be represented as a
         random walk on an unidirected weighted graph.
 
         The entropy rate, hμ, of the Markov chain can be calculated. It is the average of
@@ -1325,44 +1325,44 @@ function Statistical_Mechanics(Deus::ϵ_Machine)
         Markov entropy rate is also the entropy rate of the original source. Thus,
         one a machine is reconstructed from a data stream, its entropy is an estimate
         of the underlying process's entropy rate. If the entropy rate is low then we
-        gain certainty as the process proceeds. The entropy rate, is the rate in bits per 
-        time step at which information is produced. The entropy rate is the expected number of 
+        gain certainty as the process proceeds. The entropy rate, is the rate in bits per
+        time step at which information is produced. The entropy rate is the expected number of
         bits per symbol required to describe the process.
 
-        An ϵ-machine's entropy rate hμ(M) is the transition uncertainty averaged over all 
-        of the causal states. μ is a normalised invariant measure for a symbolic dynamical 
+        An ϵ-machine's entropy rate hμ(M) is the transition uncertainty averaged over all
+        of the causal states. μ is a normalised invariant measure for a symbolic dynamical
         system.
 
-        The entropy rate is a key parameter associated with stochastic processes, information 
-        sources, and dynamical systems. Roughly speaking, the entropy rate quantifies the average 
-        uncertainty, disorder or irregularity generated by a process or system per 'time' unit and, 
-        it is the primary subject of fundamental results in information and coding theory 
+        The entropy rate is a key parameter associated with stochastic processes, information
+        sources, and dynamical systems. Roughly speaking, the entropy rate quantifies the average
+        uncertainty, disorder or irregularity generated by a process or system per 'time' unit and,
+        it is the primary subject of fundamental results in information and coding theory
         (Shannon's noiseless coding theorem) and statistical mechanics (2nd law of thermodynamics).
-        It is not surprising, therefore, that this notion, appropriately generalised and transformed, 
-        is ubiquitous in many fields of mathematics and science when randomness or 'random-like' 
+        It is not surprising, therefore, that this notion, appropriately generalised and transformed,
+        is ubiquitous in many fields of mathematics and science when randomness or 'random-like'
         behaviour is at the heart of the theory or model being studied.
 
-        The metric of Shannon entropy rate of an information source is the rate of new information it 
-        generates per unit time, just as the metric or Kolmogorov-Sinai entropy rate of a deterministic 
-        dynamical system is a quantification of its pseudo-randomness or chaotic behaviour. 
+        The metric of Shannon entropy rate of an information source is the rate of new information it
+        generates per unit time, just as the metric or Kolmogorov-Sinai entropy rate of a deterministic
+        dynamical system is a quantification of its pseudo-randomness or chaotic behaviour.
 
-        The entroy rate is an obvious statistic to estimate from an observed symbolic sequence. When 
-        symbols are discretized, with an ever finer partition, from an orbit on the invariant 
-        density of deterministic dynamics, the Shannon entropy rate of the symbolic sequence 
-        divided by the discretization time step converges to the Kolmogorov-Sinai entropy, an invariant 
-        of a dynamical system. A Kolmogorov-Sinai entropy greater than zero defines chaos. 
+        The entroy rate is an obvious statistic to estimate from an observed symbolic sequence. When
+        symbols are discretized, with an ever finer partition, from an orbit on the invariant
+        density of deterministic dynamics, the Shannon entropy rate of the symbolic sequence
+        divided by the discretization time step converges to the Kolmogorov-Sinai entropy, an invariant
+        of a dynamical system. A Kolmogorov-Sinai entropy greater than zero defines chaos.
 
-        Furthermore, for special sorts of partitions, termed "generating", the Shannon entropy equals 
-        the KS-entropy even for low precision symbolic alphabets. Practical issues make the limit of 
-        infinitely large alphabets inadvisable for KS-entropy estimation from finite sized data sets with 
+        Furthermore, for special sorts of partitions, termed "generating", the Shannon entropy equals
+        the KS-entropy even for low precision symbolic alphabets. Practical issues make the limit of
+        infinitely large alphabets inadvisable for KS-entropy estimation from finite sized data sets with
         as the occupation in any bin tends to zero, making entropy estimation unreliable.
 
-        If M is an axiom-A attractor, there is a prescription for constructing a partition 
-        which is generating, and the equality of the metric entropy rate and the sum of 
-        the positive Lyapunov characteristic exponents can be proven. In fact, whenever 
-        an absolutely continuous invariant measure exists, a theorem due to Piesin shows 
-        that the metric entropy of a diffeomorphism is equal to the sum of the positive 
-        exponents. 
+        If M is an axiom-A attractor, there is a prescription for constructing a partition
+        which is generating, and the equality of the metric entropy rate and the sum of
+        the positive Lyapunov characteristic exponents can be proven. In fact, whenever
+        an absolutely continuous invariant measure exists, a theorem due to Piesin shows
+        that the metric entropy of a diffeomorphism is equal to the sum of the positive
+        exponents.
 
         The Markov matrix, a stochastic matrix, always has an eigenvalue that is
         equal to 1. The eigenvector associated with λ = 1 can be chosen to be strictly
@@ -1393,23 +1393,23 @@ function Statistical_Mechanics(Deus::ϵ_Machine)
         otherwise. A state is known as ergodic if it is positive recurrent and
         aperiodic. A Markov chain is ergodic if all its states are ergodic.
 
-        The states of a Markov process are either recurrent, i.e., returned to 
-        infinitely often, or transient, visited only finitely often with positive 
-        probability. For us, here, the recurrent states represent the actual causal 
-        structure of the process and, as such, they are what we are truly interested in. 
-        the most important class of transient states, and indeed the only ones encountered 
-        in practice, are the synchronization states, which can never be returned to, once 
-        a recurrent state has been visited. The synchronization states represent observational 
-        histories that are insufficient to fix the process in a definite recurrent state.  
+        The states of a Markov process are either recurrent, i.e., returned to
+        infinitely often, or transient, visited only finitely often with positive
+        probability. For us, here, the recurrent states represent the actual causal
+        structure of the process and, as such, they are what we are truly interested in.
+        the most important class of transient states, and indeed the only ones encountered
+        in practice, are the synchronization states, which can never be returned to, once
+        a recurrent state has been visited. The synchronization states represent observational
+        histories that are insufficient to fix the process in a definite recurrent state.
 
-        The states of a Markov process are either recurrent, i.e., returned to 
-        infinitely often, or transient, visited only finitely often with positive 
-        probability. For us, here, the recurrent states represent the actual causal 
-        structure of the process and, as such, they are what we are truly interested in. 
-        the most important class of transient states, and indeed the only ones encountered 
-        in practice, are the synchronization states, which can never be returned to, once 
-        a recurrent state has been visited. The synchronization states represent observational 
-        histories that are insufficient to fix the process in a definite recurrent state.  
+        The states of a Markov process are either recurrent, i.e., returned to
+        infinitely often, or transient, visited only finitely often with positive
+        probability. For us, here, the recurrent states represent the actual causal
+        structure of the process and, as such, they are what we are truly interested in.
+        the most important class of transient states, and indeed the only ones encountered
+        in practice, are the synchronization states, which can never be returned to, once
+        a recurrent state has been visited. The synchronization states represent observational
+        histories that are insufficient to fix the process in a definite recurrent state.
 
         Ergodic Markov chains have a unique stationary distribution, and absorbing
         Markov chains have stationary distributions with nonzero elements only in
@@ -1441,103 +1441,103 @@ function Statistical_Mechanics(Deus::ϵ_Machine)
         but of the state-to-state transitions. This would measure the amount of memory
         in the source. Another term for this quantity would be the complexity, Cμ.
         Cμ is the Shannon entropy of stationary distribution which quantifies the
-        uncertainty in bits for the causal states. The statistical complexity of a 
+        uncertainty in bits for the causal states. The statistical complexity of a
         state class in the average uncertainty (in bits) in the process's current state.
         This, in turn, is the same as the average amount of memory (in bits) that the
         process appears to retain about the past, given a chosen state class. That is,
-        the graph complexity is a measure of an ϵ-machine's information processing 
-        capacity in terms of the amount of information stored in the morphs. The complexity 
-        is related to the mutual information of the past and future semi-infinite sequences 
-        and to the convergence of the entropy rate. It can be interpreted as a measure of the 
-        amount of mathematical work necessary to produce a fluctuation from asymptotic statistics. 
-        In particular, it is the amount of information required to describe the behaviour at 
-        a point, and equal the log of the effective number of causal states, i.e., of different 
-        distribution of the future. It is the information contained in the causal states, given 
-        past observations. It is the information about a system's causal state required for 
+        the graph complexity is a measure of an ϵ-machine's information processing
+        capacity in terms of the amount of information stored in the morphs. The complexity
+        is related to the mutual information of the past and future semi-infinite sequences
+        and to the convergence of the entropy rate. It can be interpreted as a measure of the
+        amount of mathematical work necessary to produce a fluctuation from asymptotic statistics.
+        In particular, it is the amount of information required to describe the behaviour at
+        a point, and equal the log of the effective number of causal states, i.e., of different
+        distribution of the future. It is the information contained in the causal states, given
+        past observations. It is the information about a system's causal state required for
         maximal accurate prediction.
 
-        The difficulty of performing some task is usually called its complexity. Thus the 
-        Kolmogorov-Chaitin, (or algorithmic) complexity of a symbol sequence of length N 
-        is essentially the length of the shortest computer program needed to generate the 
-        sequence, divided by N. In cases where the sequence is an encoding of the trajectory 
-        of a dynamical ystem, this is just the Kolmogorov-Sinai entropy: the difficulty 
-        of specifying the entire sequence is just proportional to the amount of information 
-        which has to be given in order to specify it, and this is proportional to h for long 
-        time. But specifying a long symbol sequence is not the typical task associated with 
-        a dynamical system. Apart from deducing the underlying equations of motion and its 
-        parameters, the typical task is forecasting. We propose therefore the call 
-        forecasting complexity of a dynamical system the difficulty involved in forecasting 
-        it to the best possible extent. 
+        The difficulty of performing some task is usually called its complexity. Thus the
+        Kolmogorov-Chaitin, (or algorithmic) complexity of a symbol sequence of length N
+        is essentially the length of the shortest computer program needed to generate the
+        sequence, divided by N. In cases where the sequence is an encoding of the trajectory
+        of a dynamical ystem, this is just the Kolmogorov-Sinai entropy: the difficulty
+        of specifying the entire sequence is just proportional to the amount of information
+        which has to be given in order to specify it, and this is proportional to h for long
+        time. But specifying a long symbol sequence is not the typical task associated with
+        a dynamical system. Apart from deducing the underlying equations of motion and its
+        parameters, the typical task is forecasting. We propose therefore the call
+        forecasting complexity of a dynamical system the difficulty involved in forecasting
+        it to the best possible extent.
 
-        Analogous to the case of complexity of computing functions, we could distinguis between 
-        space and time complexity, depending on whether we consider limitations in storage or 
-        in CPU time as more important. We shall do neither. Instead, we shall take as our primary 
-        measure the average amount of (Shannon) information about the past sequence which has 
+        Analogous to the case of complexity of computing functions, we could distinguis between
+        space and time complexity, depending on whether we consider limitations in storage or
+        in CPU time as more important. We shall do neither. Instead, we shall take as our primary
+        measure the average amount of (Shannon) information about the past sequence which has
         to be kept at any particular time. Notice that this is inbetween space and time complexity:
-        by concentrating on the average information instead of the maximal storage needed, we are 
-        also sensitive to how often this information is fetched into fast memory. Thus the measure 
-        is more appropriate than the common wortst-case measures, in situations where one has cheap 
-        slow and expensive fast memory, and where one is sharing resources in a computer or in a 
-        network of computers with other tasks. 
+        by concentrating on the average information instead of the maximal storage needed, we are
+        also sensitive to how often this information is fetched into fast memory. Thus the measure
+        is more appropriate than the common wortst-case measures, in situations where one has cheap
+        slow and expensive fast memory, and where one is sharing resources in a computer or in a
+        network of computers with other tasks.
 
         The causal states are the minimal states that have a homogeneous distribution for
-        the next sequence of symbols and are deterministic. 
+        the next sequence of symbols and are deterministic.
 
         For completeness, note that there is an edge-complexity, Cμe that is the
         information contained in the asymptotic edge distribution. These quantities
         are not independent. From the principle of conservation of information leads
-        to the relation Cμe = Cμ + hμ. 
+        to the relation Cμe = Cμ + hμ.
 
         One of the primary roles of entropy in dynamical systems theory is that it is an invariant,
-        which is to say that any two dynamical systems have the same metric entropy 
-        if they are related by a isomorphism that preserves measure. 
+        which is to say that any two dynamical systems have the same metric entropy
+        if they are related by a isomorphism that preserves measure.
 
-        Topological entropy is related to measure entorpy by the variational principle 
-        which asserts that for a continuous action on a compact space the topological 
-        entropy equalts the supremum of the measure entropy taken over all the invariant 
-        probability measures. Heuristically, the topological entropy of a dynamical 
-        system measures the asymptotic growth rate of the number of resolvable orbits 
-        (using a given measurement partition) whose initial conditions are all close. 
-        Equivalently, the topological entropy quantifies the average time-rate of spreading 
-        a subset over nearby subsets. This process is most easily illustrated by considering 
-        a collection of subsets which form a "cover" of the state space M. The dynamic f 
-        spreads a single cover element over other elements after some time t. The number of new 
+        Topological entropy is related to measure entorpy by the variational principle
+        which asserts that for a continuous action on a compact space the topological
+        entropy equalts the supremum of the measure entropy taken over all the invariant
+        probability measures. Heuristically, the topological entropy of a dynamical
+        system measures the asymptotic growth rate of the number of resolvable orbits
+        (using a given measurement partition) whose initial conditions are all close.
+        Equivalently, the topological entropy quantifies the average time-rate of spreading
+        a subset over nearby subsets. This process is most easily illustrated by considering
+        a collection of subsets which form a "cover" of the state space M. The dynamic f
+        spreads a single cover element over other elements after some time t. The number of new
         cover elements N(t) visited by points in the original cover element can be written as,
-        N(t)~e^ht. Where h > 0 for chaotic dynamical systems. The supremum of h is obtained only 
-        if the measurement partition is "good" in that there is an unambiguous correspondence 
-        between orbits and symbol sequences. Only with such a good partition is the topological 
-        entropy of the admissable symbol sequences obtained using partition. For the topological 
-        entropy, the supremem is obtained only for special partitions; Kolmogorov proved that 
+        N(t)~e^ht. Where h > 0 for chaotic dynamical systems. The supremum of h is obtained only
+        if the measurement partition is "good" in that there is an unambiguous correspondence
+        between orbits and symbol sequences. Only with such a good partition is the topological
+        entropy of the admissable symbol sequences obtained using partition. For the topological
+        entropy, the supremem is obtained only for special partitions; Kolmogorov proved that
         the desired requirement is that the partition be generating. A partition is generating
         if, as the length of all sequences become large, the sequences label individual points.
 
-        The topological entropy gives essentially no information about attractors, it indicates, 
+        The topological entropy gives essentially no information about attractors, it indicates,
         when positive, a sensitivity of the dynamical system to external noise.
 
-        It is noted that, typically, the number of cells k required for a minimal generating 
-        partition is not known a priori. A lower bound can be obtained if we know the topological 
-        entropy of an attractor under consideration. In particular k >= 2^h, where the topological 
-        entropy, h (in bits per iteration), quantifies the exponential rate of growth of the 
-        number of observed "orbits" (symbol sequences) of increasing length. Alternatively, the 
-        number of low period UPOs provides a lower bound on k which can sometimes be tighter than that 
-        found using topological entropy. 
+        It is noted that, typically, the number of cells k required for a minimal generating
+        partition is not known a priori. A lower bound can be obtained if we know the topological
+        entropy of an attractor under consideration. In particular k >= 2^h, where the topological
+        entropy, h (in bits per iteration), quantifies the exponential rate of growth of the
+        number of observed "orbits" (symbol sequences) of increasing length. Alternatively, the
+        number of low period UPOs provides a lower bound on k which can sometimes be tighter than that
+        found using topological entropy.
 
-        In a sense the metric entropy is a generalization of the topological entropy: the 
-        metric entropy also measures the asymptotic growth rate of the number of resolvable 
-        orbits (using a given measurement partition) having close initial conditions, but 
-        weights each orbit with its probability of occurence. That is, the Kolmogorov-Sinai 
-        entropy is a quantitative measure of the impossibility of perfect forecasts. 
+        In a sense the metric entropy is a generalization of the topological entropy: the
+        metric entropy also measures the asymptotic growth rate of the number of resolvable
+        orbits (using a given measurement partition) having close initial conditions, but
+        weights each orbit with its probability of occurence. That is, the Kolmogorov-Sinai
+        entropy is a quantitative measure of the impossibility of perfect forecasts.
 
         Thus, there are only two independent quantities when modelling a source as a
         stochastic finite automaton. The entropy, hμ, as a measure of the diversity
         of patterns, and the complexity Cμ, as a measure of memory, have been taken
         as the two elementary "information processing" coordinates with which to
-        analyze a range of sources. The net result of using just the complexity and 
+        analyze a range of sources. The net result of using just the complexity and
         entropy rate is that the original equations of motion and any nonlinearity (bifurcation)
-        parameter are simply forgotten. All that is of interest is how the complexity Cμ of 
-        the data stream depends on the rate hμ of information production. The net result of using just the complexity and 
+        parameter are simply forgotten. All that is of interest is how the complexity Cμ of
+        the data stream depends on the rate hμ of information production. The net result of using just the complexity and
         entropy rate is that the original equations of motion and any nonlinearity (bifurcation)
-        parameter are simply forgotten. All that is of interest is how the complexity Cμ of 
+        parameter are simply forgotten. All that is of interest is how the complexity Cμ of
         the data stream depends on the rate hμ of information production.
 
         There is another set of quantities that derive from the skeletal structure
@@ -1546,173 +1546,173 @@ function Statistical_Mechanics(Deus::ϵ_Machine)
         topological entropy, which can be found from the connection matrix and its
         principal eigenvalue. Similarly, the state and transition complexities can
         easily be calculated. These can be used for processes with finite memory. The
-        general notions without the finiteness restriction is Cμ and Cμe. The topological 
-        complexity is the size of the minimal DFA description, or "program", required to 
-        produce sequences in the observed measurement language of which s is a member. 
-        This topological complexity counts all of the reconstructed states. Another 
-        related topological complexity would count just the recurrent states. This is 
-        the one commonly used in practice. The topological entropy;for a system given 
-        by an iterated function, represents the exponential growth rate of the number 
-        of distinguishabe orbits of the iterates.This is 
-        the one commonly used in practice. The topological entropy;for a system given 
-        by an iterated function, represents the exponential growth rate of the number 
+        general notions without the finiteness restriction is Cμ and Cμe. The topological
+        complexity is the size of the minimal DFA description, or "program", required to
+        produce sequences in the observed measurement language of which s is a member.
+        This topological complexity counts all of the reconstructed states. Another
+        related topological complexity would count just the recurrent states. This is
+        the one commonly used in practice. The topological entropy;for a system given
+        by an iterated function, represents the exponential growth rate of the number
+        of distinguishabe orbits of the iterates.This is
+        the one commonly used in practice. The topological entropy;for a system given
+        by an iterated function, represents the exponential growth rate of the number
         of distinguishabe orbits of the iterates.
 
         A measure of knowledge relaxation on finitary machines is given by the time-
-        dependent finitary complexity. Where knowledge of a process consists of a 
-        data stream, an agent's current model, how the information used to build the 
+        dependent finitary complexity. Where knowledge of a process consists of a
+        data stream, an agent's current model, how the information used to build the
         model was obtained, and the method or algorithm which constructs the model.
         The trajectory of complexity captures the dynamics of knowledge relaxation.
 
-        The finitary complexity is a measure of an ϵ-machine's information processing 
-        capacity in terms of the amount of information stored in the morphs. It is 
-        directly related to the mutual information of the past and future semi-infinite 
-        sequences and the convergence of the entropy enstimates hα(L). It can be interpreted, 
-        then, as a measure of the amount of mathematical work necessary to produce a fluctuation 
-        form asymptotic statistics. The units for complexity measures are bits of information. 
-        However, at this level we see that the complexity begins to more strongly reflect 
-        the degree of computational capability and so we refer to the units as Turings, rather 
-        than bits. At this low lever the difference between bits and Turings is not as dramatic 
-        as at higher levels where each unit of machine structure is clearly associated with 
-        sophisticated computation. 
+        The finitary complexity is a measure of an ϵ-machine's information processing
+        capacity in terms of the amount of information stored in the morphs. It is
+        directly related to the mutual information of the past and future semi-infinite
+        sequences and the convergence of the entropy enstimates hα(L). It can be interpreted,
+        then, as a measure of the amount of mathematical work necessary to produce a fluctuation
+        form asymptotic statistics. The units for complexity measures are bits of information.
+        However, at this level we see that the complexity begins to more strongly reflect
+        the degree of computational capability and so we refer to the units as Turings, rather
+        than bits. At this low lever the difference between bits and Turings is not as dramatic
+        as at higher levels where each unit of machine structure is clearly associated with
+        sophisticated computation.
 
-        The finitary complexity is a measure of an ϵ-machine's information processing 
-        capacity in terms of the amount of information stored in the morphs. It is 
-        directly related to the mutual information of the past and future semi-infinite 
-        sequences and the convergence of the entropy enstimates hα(L). It can be interpreted, 
-        then, as a measure of the amount of mathematical work necessary to produce a fluctuation 
-        form asymptotic statistics. The units for complexity measures are bits of information. 
-        However, at this level we see that the complexity begins to more strongly reflect 
-        the degree of computational capability and so we refer to the units as Turings, rather 
-        than bits. At this low lever the difference between bits and Turings is not as dramatic 
-        as at higher levels where each unit of machine structure is clearly associated with 
-        sophisticated computation. 
+        The finitary complexity is a measure of an ϵ-machine's information processing
+        capacity in terms of the amount of information stored in the morphs. It is
+        directly related to the mutual information of the past and future semi-infinite
+        sequences and the convergence of the entropy enstimates hα(L). It can be interpreted,
+        then, as a measure of the amount of mathematical work necessary to produce a fluctuation
+        form asymptotic statistics. The units for complexity measures are bits of information.
+        However, at this level we see that the complexity begins to more strongly reflect
+        the degree of computational capability and so we refer to the units as Turings, rather
+        than bits. At this low lever the difference between bits and Turings is not as dramatic
+        as at higher levels where each unit of machine structure is clearly associated with
+        sophisticated computation.
 
-        A measure of the "goodness of fit" that can be used to evaluate ϵ, μ, δ, and 
-        the level L of subtree approximation can be given by the graph indeterminacy. 
+        A measure of the "goodness of fit" that can be used to evaluate ϵ, μ, δ, and
+        the level L of subtree approximation can be given by the graph indeterminacy.
         This quantity measure the degree of ambiguity in transitions between graph
-        vertices. An ϵ-machine is reconstructable from L-level equivalence classes if 
-        IG_L vanishes. Finite indeterminacy, at some given L, ϵ, μ, and δ indicates a 
+        vertices. An ϵ-machine is reconstructable from L-level equivalence classes if
+        IG_L vanishes. Finite indeterminacy, at some given L, ϵ, μ, and δ indicates a
         residual amount of extrinsic noise at the level of approximation.
 
         We may include an α parameterization of all the information and complexity quantities.
-        This would include the α-order total Renyi entropy, or "free information", a 
+        This would include the α-order total Renyi entropy, or "free information", a
         partition function, the Renyi-specific entropy (rate), i.e., entropy per measurement, etc.
         The parameter α has several interpretations, all of interest in the present context.
         From the physical point of view, α(=1-β) plays the role of the inverse temperature β
-        int the statistical mechanics of spin systems. The spin states correspond to measurements 
-        and a configuration of spins on a spatial lattice to a temporal sequence of 
-        measurements. Just as the temperature increases the probability of different spin 
-        configurations by increasing the number of available states, α accentuates different 
-        subsets of measurement sequences in the asymptotic distribution. Particularly, as 
-        α approaches 1, we accentuate the dynamics and not just the topology. For example, 
-        any transient states will be removed from consideration. Just like temperature can 
-        be viewed as a Lagrange multiplier from the perspective of thermodynamics, likewise α can be 
-        seen as a Lagrange multiplier from the perspective of Bayesian inference. In the first 
-        case the Lagrange multiplier, temperature, allows us to maximise the (Gibbs) entropy 
-        subject to some constraints, like conservation of charge, probability, or energy. 
-        That is, temperature maximises the probability distribution. Similarly, α tells us which 
-        maximum entropy distribution corresponds with the maximum likelihood distribution of 
-        observed (measured) cylinder probabilities. Temperature told us what the distribution 
+        int the statistical mechanics of spin systems. The spin states correspond to measurements
+        and a configuration of spins on a spatial lattice to a temporal sequence of
+        measurements. Just as the temperature increases the probability of different spin
+        configurations by increasing the number of available states, α accentuates different
+        subsets of measurement sequences in the asymptotic distribution. Particularly, as
+        α approaches 1, we accentuate the dynamics and not just the topology. For example,
+        any transient states will be removed from consideration. Just like temperature can
+        be viewed as a Lagrange multiplier from the perspective of thermodynamics, likewise α can be
+        seen as a Lagrange multiplier from the perspective of Bayesian inference. In the first
+        case the Lagrange multiplier, temperature, allows us to maximise the (Gibbs) entropy
+        subject to some constraints, like conservation of charge, probability, or energy.
+        That is, temperature maximises the probability distribution. Similarly, α tells us which
+        maximum entropy distribution corresponds with the maximum likelihood distribution of
+        observed (measured) cylinder probabilities. Temperature told us what the distribution
         of energy levels would be, α tells us what the distribution over cyliders is. If temperature
-        is small, then the system is dominated by the lowest energy levels. When α is 1, then the 
-        system is dominated by the smallest set of probabilities over cylinders. The relation to 
-        Bayesian inference is through the fact that when α is equal to 0 it is as if all knowledge 
-        of the probabilistic structure of the machine has been removed, and we are in a maximal state 
-        of ignorance. Since cylinder probabilities are closely associated with morph probabilities, and 
-        thereby they specify our knowledge of the future, if they are removed from consideration, 
-        then how we update our credances for future events (causal states) given a measurement value 
-        is maximally unspecified. That is, we may know to which states we may transition to, but 
-        not the likelihoods of transitioning. 
+        is small, then the system is dominated by the lowest energy levels. When α is 1, then the
+        system is dominated by the smallest set of probabilities over cylinders. The relation to
+        Bayesian inference is through the fact that when α is equal to 0 it is as if all knowledge
+        of the probabilistic structure of the machine has been removed, and we are in a maximal state
+        of ignorance. Since cylinder probabilities are closely associated with morph probabilities, and
+        thereby they specify our knowledge of the future, if they are removed from consideration,
+        then how we update our credances for future events (causal states) given a measurement value
+        is maximally unspecified. That is, we may know to which states we may transition to, but
+        not the likelihoods of transitioning.
 
-        Thus, the zeroth-order Renyi entropy gives the logarithm of the measure of the support set of 
-        the probability density, and the Shannon entropy gives the logarithm of the size of the 
-        "effective" support set. 
+        Thus, the zeroth-order Renyi entropy gives the logarithm of the measure of the support set of
+        the probability density, and the Shannon entropy gives the logarithm of the size of the
+        "effective" support set.
 
-        Similarly, the partition function takes on an analogous role as in statistical mechanics, 
+        Similarly, the partition function takes on an analogous role as in statistical mechanics,
         where it is the counterpart of inverse temperature and also a Lagrange multiplier. Specifically,
-        it is a normalisation constant, which doesn't distinguish between the different states (cylinders) 
-        while ensuring the conservation of information according to the 2nd axiom  of probability and the 
-        conservation of cylinders. 
+        it is a normalisation constant, which doesn't distinguish between the different states (cylinders)
+        while ensuring the conservation of information according to the 2nd axiom  of probability and the
+        conservation of cylinders.
 
-        Following symbolic dynamics terminology, α = 0 will be referred to as the topological or 
-        counting case; α = 1, as the metric or probabilistic case or high temperature limit. Varying 
-        α moves continuously from topological to metric machines. Originally in his studies of 
-        generalized information measures, Renyi introduces α as just this type of interpolation 
-        parameter and noted that α-entropy has the character of a Laplace transform of a distribution. 
-        here we have another requirement for α: it gives the proper algebra of trajectories in orbit 
-        space. That is, α is necessary for computing measurement sequence probabilities from the 
-        stochastic connection matrix Tα. Without it, products of Tα fail to distinguish distinct 
-        sequences. 
+        Following symbolic dynamics terminology, α = 0 will be referred to as the topological or
+        counting case; α = 1, as the metric or probabilistic case or high temperature limit. Varying
+        α moves continuously from topological to metric machines. Originally in his studies of
+        generalized information measures, Renyi introduces α as just this type of interpolation
+        parameter and noted that α-entropy has the character of a Laplace transform of a distribution.
+        here we have another requirement for α: it gives the proper algebra of trajectories in orbit
+        space. That is, α is necessary for computing measurement sequence probabilities from the
+        stochastic connection matrix Tα. Without it, products of Tα fail to distinguish distinct
+        sequences.
 
         A central requirement in identifying models from observed data is that a particular
         inference methodology produces a sequence of hypotheses that converge to the
-        converge to the correct one describing the underlying process. The complexity can 
-        be used as a diagnotic for this since it is a direct measure of the size of the 
-        hypothesized stochastic DFA at a given reconstruction cylinder length. The 
-        identification method converges with increasing cylinder length if the rate of 
-        change of complexity vanishes as the complexity vanishes as L is increased. If 
-        the complexity vanishes, then the noisy dynamical system system has been identified. 
-        If it does not vanish in the limit L-> ∞, then the complexity is a measure of the 
-        rate of divergence of the model size and so quantifies a higher level of computational 
-        complexity. In this case, the model basis must be augmented in an attempt to find 
-        a finite description at some higher level. In other words, while the DFA may be 
+        converge to the correct one describing the underlying process. The complexity can
+        be used as a diagnotic for this since it is a direct measure of the size of the
+        hypothesized stochastic DFA at a given reconstruction cylinder length. The
+        identification method converges with increasing cylinder length if the rate of
+        change of complexity vanishes as the complexity vanishes as L is increased. If
+        the complexity vanishes, then the noisy dynamical system system has been identified.
+        If it does not vanish in the limit L-> ∞, then the complexity is a measure of the
+        rate of divergence of the model size and so quantifies a higher level of computational
+        complexity. In this case, the model basis must be augmented in an attempt to find
+        a finite description at some higher level. In other words, while the DFA may be
         a good fit for the data, it may not necessarily be the best model for the system.
 
-        The machines alse capture the information flow within the given data stream. If state B 
-        follows state A then as far as the observer is concerned A is a cause of B and B is one 
-        effect of A. In this case, we say that information flows from A to B. The amount of 
-        information that flows is the negative logarithm of the connecting transition probability 
+        The machines alse capture the information flow within the given data stream. If state B
+        follows state A then as far as the observer is concerned A is a cause of B and B is one
+        effect of A. In this case, we say that information flows from A to B. The amount of
+        information that flows is the negative logarithm of the connecting transition probability
         -log(2, Deus.T[A, B])
 
-        HShannon measues the number of distinct sequences (possible futures). That number increases 
-        if there is branchin as one moves down the tree and forward in time. At the other end, the 
-        Hartley entropy is given simply by the total number of distinct sequences independent of their 
-        probability. If the probability distributin is uniform on the nonzero probability cylinders then 
-        these two entropies are equal. Any difference is thus a measure of deviation of the cylinder from 
-        uniformity. The latter observation leads to a parametrized generalization of the entropy introduced 
-        by Renyi. This we put into a statistical mechanical formalism by defining a partition function for the 
-        tree. 
+        HShannon measues the number of distinct sequences (possible futures). That number increases
+        if there is branchin as one moves down the tree and forward in time. At the other end, the
+        Hartley entropy is given simply by the total number of distinct sequences independent of their
+        probability. If the probability distributin is uniform on the nonzero probability cylinders then
+        these two entropies are equal. Any difference is thus a measure of deviation of the cylinder from
+        uniformity. The latter observation leads to a parametrized generalization of the entropy introduced
+        by Renyi. This we put into a statistical mechanical formalism by defining a partition function for the
+        tree.
 
-        The average branching rate in the tree measures the growth rate of the number of new sequences 
-        of increasing length. And as such it is a measure of unpredictability in that a periodic process will 
-        at some length give rise to no more new cylinders and a random one will. The Renyi specific entropy, i.e. 
-        entropy per measurement, can be approximation from the L-cylinder distribution by hα. The growth rate of 
-        total Shannon entropy is often referred to in information theory as the source entropy and in dynamical 
-        systems as the metric entropy. The corresponding Hartley entropy growth rate is called the topological entropy. 
+        The average branching rate in the tree measures the growth rate of the number of new sequences
+        of increasing length. And as such it is a measure of unpredictability in that a periodic process will
+        at some length give rise to no more new cylinders and a random one will. The Renyi specific entropy, i.e.
+        entropy per measurement, can be approximation from the L-cylinder distribution by hα. The growth rate of
+        total Shannon entropy is often referred to in information theory as the source entropy and in dynamical
+        systems as the metric entropy. The corresponding Hartley entropy growth rate is called the topological entropy.
 
-        If a tree representation is good, then the information gain, or entropy rate, at some depth will vanish. 
-        This indicates that no further information need be stored to represent the process. This happens for a 
-        periodic process for trees deeper than the period. If the process is chaotic, with positive entropy, then 
-        the information contained in the tree representation will grow exponentially fast with modelling longer 
-        subsequences in the data stream. This indicates that the tree representation is inadequate and suggests  
-        that the modeler innovate a new class of representations. 
+        If a tree representation is good, then the information gain, or entropy rate, at some depth will vanish.
+        This indicates that no further information need be stored to represent the process. This happens for a
+        periodic process for trees deeper than the period. If the process is chaotic, with positive entropy, then
+        the information contained in the tree representation will grow exponentially fast with modelling longer
+        subsequences in the data stream. This indicates that the tree representation is inadequate and suggests
+        that the modeler innovate a new class of representations.
 
-        HShannon measues the number of distinct sequences (possible futures). That number increases 
-        if there is branchin as one moves down the tree and forward in time. At the other end, the 
-        Hartley entropy is given simply by the total number of distinct sequences independent of their 
-        probability. If the probability distributin is uniform on the nonzero probability cylinders then 
-        these two entropies are equal. Any difference is thus a measure of deviation of the cylinder from 
-        uniformity. The latter observation leads to a parametrized generalization of the entropy introduced 
-        by Renyi. This we put into a statistical mechanical formalism by defining a partition function for the 
-        tree. 
+        HShannon measues the number of distinct sequences (possible futures). That number increases
+        if there is branchin as one moves down the tree and forward in time. At the other end, the
+        Hartley entropy is given simply by the total number of distinct sequences independent of their
+        probability. If the probability distributin is uniform on the nonzero probability cylinders then
+        these two entropies are equal. Any difference is thus a measure of deviation of the cylinder from
+        uniformity. The latter observation leads to a parametrized generalization of the entropy introduced
+        by Renyi. This we put into a statistical mechanical formalism by defining a partition function for the
+        tree.
 
-        The average branching rate in the tree measures the growth rate of the number of new sequences 
-        of increasing length. And as such it is a measure of unpredictability in that a periodic process will 
-        at some length give rise to no more new cylinders and a random one will. The Renyi specific entropy, i.e. 
-        entropy per measurement, can be approximation from the L-cylinder distribution by hα. The growth rate of 
-        total Shannon entropy is often referred to in information theory as the source entropy and in dynamical 
-        systems as the metric entropy. The corresponding Hartley entropy growth rate is called the topological entropy. 
+        The average branching rate in the tree measures the growth rate of the number of new sequences
+        of increasing length. And as such it is a measure of unpredictability in that a periodic process will
+        at some length give rise to no more new cylinders and a random one will. The Renyi specific entropy, i.e.
+        entropy per measurement, can be approximation from the L-cylinder distribution by hα. The growth rate of
+        total Shannon entropy is often referred to in information theory as the source entropy and in dynamical
+        systems as the metric entropy. The corresponding Hartley entropy growth rate is called the topological entropy.
 
-        If a tree representation is good, then the information gain, or entropy rate, at some depth will vanish. 
-        This indicates that no further information need be stored to represent the process. This happens for a 
-        periodic process for trees deeper than the period. If the process is chaotic, with positive entropy, then 
-        the information contained in the tree representation will grow exponentially fast with modelling longer 
-        subsequences in the data stream. This indicates that the tree representation is inadequate and suggests  
-        that the modeler innovate a new class of representations. 
+        If a tree representation is good, then the information gain, or entropy rate, at some depth will vanish.
+        This indicates that no further information need be stored to represent the process. This happens for a
+        periodic process for trees deeper than the period. If the process is chaotic, with positive entropy, then
+        the information contained in the tree representation will grow exponentially fast with modelling longer
+        subsequences in the data stream. This indicates that the tree representation is inadequate and suggests
+        that the modeler innovate a new class of representations.
 
-        These quantities are probabilistic, and referred to Turing machines with a 
-        random internal register. 
+        These quantities are probabilistic, and referred to Turing machines with a
+        random internal register.
     =#
 
     Deus.IG = 0
@@ -1730,10 +1730,10 @@ function Statistical_Mechanics(Deus::ϵ_Machine)
         end
 
         #normalise probabilities - only necessary if IG does not vanish
-        pt = sum(Deus.Ts[v][3, :])  
+        pt = sum(Deus.Ts[v][3, :])
         if pt != 1
             Deus.Ts[v][3, :] =  Deus.Ts[v][3, :]./pt
-        end  
+        end
 
         num_trans = length(Deus.Ts[v][1,:])
 
@@ -1784,7 +1784,7 @@ function Statistical_Mechanics(Deus::ϵ_Machine)
             if Deus.pv[v] != 0
 
                 Deus.Cμ = Deus.Cμ - Deus.pv[v]*log(2, Deus.pv[v])
-                
+
                 syms = unique!(Deus.Ts[v][2, :])
                 psv = Array{Float64, 1}(undef, length(syms))
 
@@ -1792,14 +1792,14 @@ function Statistical_Mechanics(Deus::ϵ_Machine)
                     sloc = findall( ==(syms[s]), Deus.Ts[v][2, :])
                     psv[s] = sum(Deus.Ts[v][3, sloc])
                 end
-                
+
                 for vd in axes(trans, 2)
 
                     vloc = findall(i -> all(j -> trans[:, vd][j] == Deus.Ts[v][1:2, :][j,i], 1:2), 1:num_trans)
 
                     pt = sum(Deus.Ts[v][3, vloc])
                     pe = Deus.pv[v]*pt
- 
+
                     Deus.hμ = Deus.hμ - pe*log(2, pt)
                     Deus.Cμe = Deus.Cμe - pe*log(2, pe)
 
@@ -1866,8 +1866,8 @@ function Markov_Evolution(Deus::ϵ_Machine, n; start_ic = zeros(1, length(Deus.T
         else
             state = start_ic
             for i in 1:n-1
-                
-                state = state*Deus.T                
+
+                state = state*Deus.T
             end
         end
     else
@@ -1897,18 +1897,18 @@ function Complexity_Series(Deus::ϵ_Machine)
         state_dist = start_ic
         Deus.Cμ_t[1] = 0
         for i in 2:N
-            
+
             state_dist = state_dist*Deus.T
             Deus.Cμ_t[i] = 0
 
             for v in 1:num_states
-    
+
                 if state_dist[v] != 0
-    
+
                     Deus.Cμ_t[i] = Deus.Cμ_t[i] + state_dist[v]*log(2, state_dist[v])
                 end
-            end  
-            
+            end
+
             Deus.Cμ_t[i] = -Deus.Cμ_t[i]
         end
     else
@@ -1921,11 +1921,11 @@ end
 function χ2_test(dist_1, dist_2, N1, N2; α = 0.05, IND = 2)
 
     # Perform a Chi^2 test, if the probabilities and number of occurrences are given
-    # IND ∈ [0,1,2] sets accuracy: IND=0 means 14 significant digits accuracy, 
+    # IND ∈ [0,1,2] sets accuracy: IND=0 means 14 significant digits accuracy,
     # IND = 1 means 6 significant digit, and IND = 2 means only 3 digit accuracy
 
     K = length(dist_1) - 1 # degrees of freedom
-    
+
     if K > 1
 
         pa = 0.0
@@ -1935,7 +1935,7 @@ function χ2_test(dist_1, dist_2, N1, N2; α = 0.05, IND = 2)
 
             χ_2 = (pa - N1^2/(N1 + N2))/(N1*N2/(N1 + N2)^2)
 
-        if χ_2 < 0 
+        if χ_2 < 0
             χ_2 = 0
         end
 
@@ -1973,7 +1973,7 @@ function Surgeon(Deus::ϵ_Machine, state_from)
         #fnd = findall(x->x == (state_from), Deus.Ts[parent_state][1,:])
 
         #Deus.Ts[parent_state][1, fnd] = ones(length(fnd))*state_ref
-        
+
         #deleteat!(Deus.Ts, state_from)
     end
 
@@ -1988,7 +1988,7 @@ function Surgeon(Deus::ϵ_Machine, state_from)
         end
     end
 
-    #= 
+    #=
         # Identifying the transitions of any dangling states with the start state, since both have elements of ignorance
         # Or they should be removed
 
@@ -2013,7 +2013,7 @@ function Surgeon(Deus::ϵ_Machine, state_from)
 end
 
 function The_Wire(Deus::ϵ_Machine, symbols, ancest, Pr_c, cn)
-    
+
     if ancest != 0
 
         perm = sortperm(Deus.Tree.Nodes[ancest].child_vals)
@@ -2026,7 +2026,7 @@ function The_Wire(Deus::ϵ_Machine, symbols, ancest, Pr_c, cn)
 
             ancest_dist = Deus.Tree.Nodes[ancest].Pr_c[perm]
             ancest_cn = Deus.Tree.Nodes[ancest].cn
-            Pr_test = χ2_test(Pr_c, ancest_dist, cn, ancest_cn; α = Deus.δ) 
+            Pr_test = χ2_test(Pr_c, ancest_dist, cn, ancest_cn; α = Deus.δ)
 
         elseif val_test
 
@@ -2060,35 +2060,35 @@ function Permutation_Entropy(Deus::ϵ_Machine, D)
 
     #= Theory:
         The permutation entropy appears to be very similar to the Lyapunov exponents.
-        Most importantly, it yields meaningful results in the presence of observational 
-        and dynamical noise. Permutation entropy is an appropriate complexity measure for a  
-        chaotic time series. In contrast with all known complexity measures, a small noise 
-        does not essentially change the complexity for arbitrary real-world time series. 
-        Since the method is extremely fast and robust, it seems preferable when there are 
-        huge data sets and no time for preprocessing and fine-tuning of parameters. 
-        
-        Another advantage is that the symbol sequence comes naturally from the data, x, 
-        without further model assumptions. Partitions are found by comparison of 
+        Most importantly, it yields meaningful results in the presence of observational
+        and dynamical noise. Permutation entropy is an appropriate complexity measure for a
+        chaotic time series. In contrast with all known complexity measures, a small noise
+        does not essentially change the complexity for arbitrary real-world time series.
+        Since the method is extremely fast and robust, it seems preferable when there are
+        huge data sets and no time for preprocessing and fine-tuning of parameters.
+
+        Another advantage is that the symbol sequence comes naturally from the data, x,
+        without further model assumptions. Partitions are found by comparison of
         neighbouring values of xt (i.e. ordinality). The entropies are calculated for d
-        ifferent embedding dimensions n (alphabet size). For practical purposes, n is 
-        recommended to be chosen between 3 and 7. 
+        ifferent embedding dimensions n (alphabet size). For practical purposes, n is
+        recommended to be chosen between 3 and 7.
 
-        The lower bound on the permutation entropy is 0 and the upper bound is log(n!). 
-        Hence, we can normalise the upper bound to 1. The lower bound is attained for an 
-        increasing or decreasing sequence of values, and the upper bound for a completely 
-        random system (i.i.d. sequence) wehere all n! possible permutations appear with 
-        the same probability. The time series presents some sort of dynamics when the 
-        normalised entropy is less that 1. 
+        The lower bound on the permutation entropy is 0 and the upper bound is log(n!).
+        Hence, we can normalise the upper bound to 1. The lower bound is attained for an
+        increasing or decreasing sequence of values, and the upper bound for a completely
+        random system (i.i.d. sequence) wehere all n! possible permutations appear with
+        the same probability. The time series presents some sort of dynamics when the
+        normalised entropy is less that 1.
 
-        It has been shown that for piecewise monotone interval maps, hpe, converges to the 
+        It has been shown that for piecewise monotone interval maps, hpe, converges to the
         Kolmogorov-Sinai entropy rate with n -> ∞, but this convergence is rather slow.
 
-        Permutation entropy quantifies the diversity of possible orderings of the values a 
-        random or deterministic system can take, as Shannon entropy quantifies the diversity 
-        of values. The metric and permutation entropy rates - measures of new disorder per 
-        new observed value - are equal for ergodic finite-alphabet information sources 
-        (discrete time stationary stochastic processes). The same holds for deterministic 
-        dynamical systems defined by ergodic maps on n-dimensional intervals. 
+        Permutation entropy quantifies the diversity of possible orderings of the values a
+        random or deterministic system can take, as Shannon entropy quantifies the diversity
+        of values. The metric and permutation entropy rates - measures of new disorder per
+        new observed value - are equal for ergodic finite-alphabet information sources
+        (discrete time stationary stochastic processes). The same holds for deterministic
+        dynamical systems defined by ergodic maps on n-dimensional intervals.
     =#
 
     println("\n____________________________________________________")
@@ -2108,7 +2108,7 @@ function Permutation_Entropy(Deus::ϵ_Machine, D)
         #N = divs*D
         Deus.Tree = Parse_Tree(Deus.k + 1, D, 0, 0.0) # initialising an empty tree
 
-        for i in 1:Deus.k 
+        for i in 1:Deus.k
 
             rolling[1:end-1] = rolling[2:end]
 
@@ -2116,7 +2116,7 @@ function Permutation_Entropy(Deus::ϵ_Machine, D)
                 rolling[end] = Deus.x[d, i + 1] .- Deus.x[d, i]
             end
 
-            if i >= D 
+            if i >= D
 
                 s_pe[1] = 0.0
                 s_pe[2] = rolling[1]
@@ -2161,13 +2161,13 @@ function Cranking(Deus::ϵ_Machine, x_in, μ_s)
 
     #Symbolic_Shadowing(Deus)
 
-    #= Tree_Isomorphism(Deus)
+    Tree_Isomorphism(Deus)
 
     #Statistical_Mechanics(Deus)
     Parametric_Statistical_Mechanics(Deus) # same as above but paramatrized to order α
     Load_values(Deus)
 
-    Complexity_Series(Deus) # time evolution of complexity - knowledge relaxation =#
+    Complexity_Series(Deus) # time evolution of complexity - knowledge relaxation
 
     return nothing
 end
@@ -2193,7 +2193,7 @@ function Plane_Layout(p, ax, L)
     # gives the coordinates to the nodes such that they are laid out in a plane
     l = 1
     d = convert(Int64, round(sqrt(L)))
-    f = d - 1 
+    f = d - 1
     for i in 1:L
         # graph coordinates
         x = l*(i-1)%d - f*l/2
@@ -2292,10 +2292,10 @@ end
 function GetMoore(M, node, torus)
 
     #=
-        Returns a vector with locations of associated nodes in a Moore neighbourhood 
+        Returns a vector with locations of associated nodes in a Moore neighbourhood
         with a range of 1.
 
-        A Moore neighbourhood is a square-shaped neighbourhood that can be used to 
+        A Moore neighbourhood is a square-shaped neighbourhood that can be used to
         define a set of cells surrounding a given cell that may affect the evolution
         of a two-dimensional cellular automaton on a square grid.
     =#
@@ -2429,7 +2429,7 @@ function SquareLattice(L; torus = false)
 
     d = convert(Int64, floor(sqrt(L)))
     L = d^2 # number of nodes for square
-    
+
     M = Array{Float64, 2}(undef, L, L)
     M = fill!(M, 0)
 
@@ -2439,7 +2439,7 @@ function SquareLattice(L; torus = false)
 
             M[i, i + 1] = 1
         elseif torus && M[i, i - d + 1] == 0 && M[i - d + 1, i] == 0
-            
+
             M[i, i - d + 1] = 1
         end
 
@@ -2515,7 +2515,7 @@ function SmallWorld(num_nodes; Z = 2, p = 0.2, num_sources = num_nodes)
     =#
 
     num_loads = num_nodes - num_sources
-    
+
     if num_sources > num_loads
         num_sources = num_nodes
     end
@@ -2540,7 +2540,7 @@ function SmallWorld(num_nodes; Z = 2, p = 0.2, num_sources = num_nodes)
                     CM[i, i + j] = cablecount
                     cablecount += 1
 
-                elseif CM[i + j - num_sources, i] == 0 
+                elseif CM[i + j - num_sources, i] == 0
 
                     CM[i + j - num_sources, i] = cablecount
                     cablecount += 1
@@ -2562,7 +2562,7 @@ function SmallWorld(num_nodes; Z = 2, p = 0.2, num_sources = num_nodes)
                     CM[i, i + j] = cablecount
                     cablecount += 1
 
-                elseif CM[i + j - num_sources, i] == 0 
+                elseif CM[i + j - num_sources, i] == 0
 
                     CM[i + j - num_sources, i] = cablecount
                     cablecount += 1
@@ -2593,7 +2593,7 @@ function SmallWorld(num_nodes; Z = 2, p = 0.2, num_sources = num_nodes)
             cablecount += 1
 
         elseif node1 > node2 && CM[node2,node1] < 1
-            
+
             CM[node2,node1] = cablecount
             cablecount += 1
         end
@@ -2715,7 +2715,7 @@ function MG_SmallWorld(num_sources; Z = 2, p = 0.2)
                     CM[i, i + j] = cablecount
                     cablecount += 1
 
-                elseif CM[i + j - num_sources, i] == 0 
+                elseif CM[i + j - num_sources, i] == 0
 
                     CM[i + j - num_sources, i] = cablecount
                     cablecount += 1
@@ -2745,7 +2745,7 @@ function MG_SmallWorld(num_sources; Z = 2, p = 0.2)
                 cablecount += 1
 
             elseif node1 > node2 && CM[node2, node1] < 1
-                
+
                 CM[node2, node1] = cablecount
                 cablecount += 1
             end
@@ -2753,7 +2753,7 @@ function MG_SmallWorld(num_sources; Z = 2, p = 0.2)
 
     end
 
-    #= CM = NewCM(CM, size(CM, 1), 2*num_sources) 
+    #= CM = NewCM(CM, size(CM, 1), 2*num_sources)
 
     for i in 1:num_sources
 
@@ -2773,7 +2773,7 @@ function MG_SmallWorld(num_sources; Z = 2, p = 0.2)
     end
  =#
 
-    CM = NewCM(CM, size(CM, 1), num_sources) 
+    CM = NewCM(CM, size(CM, 1), num_sources)
 
     for i in 1:num_sources
 
@@ -2842,7 +2842,7 @@ function Barabasi_Albert(L; m = 1, α = 0)
                 p = k/kt
 
                 if rand() < p && CM[i, j] != 1 && m_count < m
-                    
+
                     CM[i, j] = cablecount
                     CM[j, i] = -1*cablecount
                     m_count += 1
@@ -2910,7 +2910,7 @@ function MG_Barabasi_Albert(num_sources; m = 1, α = 0)
                     p = k/kt
 
                     if rand() < p && CM[i, j] != 1 && m_count < m
-                        
+
                         CM[i, j] = cablecount
                         m_count += 1
                         cablecount += 1
@@ -2920,7 +2920,7 @@ function MG_Barabasi_Albert(num_sources; m = 1, α = 0)
         end
     end
 
-    #= CM = NewCM(CM, size(CM, 1), 2*num_sources) 
+    #= CM = NewCM(CM, size(CM, 1), 2*num_sources)
 
     for i in 1:num_sources
 
@@ -2939,7 +2939,7 @@ function MG_Barabasi_Albert(num_sources; m = 1, α = 0)
         cablecount += 1
     end =#
 
-    CM = NewCM(CM, size(CM, 1), num_sources) 
+    CM = NewCM(CM, size(CM, 1), num_sources)
 
     for i in 1:num_sources
 
@@ -3042,23 +3042,23 @@ end
 function CCA_dynamics(Net, nodekey; T = 2, κ = 4)
 
     #= Theory:
-        Here we have the dynamics of cyclic cellular automata, which are 
-        models of pattern formation in excitable media. Each site in a 
+        Here we have the dynamics of cyclic cellular automata, which are
+        models of pattern formation in excitable media. Each site in a
         square lattice has one of κ colours. A cell of colour "nodekey" will
         change its colour to (nodekey + 1)mod(κ) if there are already at least
         T ("threshold") cells of that colour in its neighbourhood, i.e., within
-        a distance r ("range") of that cell. Otherwise, the cell keeps its 
+        a distance r ("range") of that cell. Otherwise, the cell keeps its
         current colour. (In normal excitable media, which have a unique quiescent
         state, the role of the threshold is slightly different). All the cells
         update their colours in parallel.
 
         CCA have three generic long-run behaviours, depending on the ratio of the
-        threshold to the range. At high thresholds, CCA form homogeneous blocks of 
-        solid colours, which are completely static ("fixation"). At very low thresholds, 
+        threshold to the range. At high thresholds, CCA form homogeneous blocks of
+        solid colours, which are completely static ("fixation"). At very low thresholds,
         the entire lattice eventually oscillates periodically; sometimes rotating spiral
         grow to engulf the entire lattice. With intermediate thresholds, incoherent
         traveling waves form, propagate, collide and disperse; this, metaphorically,
-        is "turbulence". With a range of one Moore (box) neighbourhood and κ = 4, the 
+        is "turbulence". With a range of one Moore (box) neighbourhood and κ = 4, the
         phenomology is as follows: T = 1 and T = 2 are both locally periodic, but T = 2
         produces spiral waves, while T = 1 quenches incoherent local oscillations. T = 3
         leads to meta-stable turbulence - spiral waves can form and entrain the CA, but
@@ -3074,10 +3074,10 @@ function CCA_dynamics(Net, nodekey; T = 2, κ = 4)
 
         new_key = (nodekey[j] + 1)%κ
         for k in eachindex(nn)
-            
+
             if nodekey[nn[k]] == new_key
                 c = c + 1
-            end 
+            end
         end
 
         if c >= T
@@ -3095,7 +3095,7 @@ function initialise_CCA(x0)
     L = length(x0)
 
     for i in 1:L # defining the initial state "colours" of the nodes
-        
+
         g = 4*rand()
         if g < 1
             x0[i] = 0
@@ -3118,7 +3118,7 @@ function Draw_Plots(Deus::ϵ_Machine)
 
     fig = Figure(backgroundcolor = RGBf(0.98, 0.98, 0.98), resolution=(1600, 800))
     G_heading = fig[1, 1:3] = GridLayout()
-    Label(G_heading[1,1], "Statistical Mechanics of Networks", 
+    Label(G_heading[1,1], "Statistical Mechanics of Networks",
             textsize = 30,
             font = "TeX Gyre Heros Bold")
 
@@ -3129,14 +3129,14 @@ function Draw_Plots(Deus::ϵ_Machine)
 
     display(fig)
 
-    #_______________________________________________________________________________   
+    #_______________________________________________________________________________
 
     fnd = findall(x->x != (0.00), Deus.pv)
     rel_dangs = sum(Deus.pv[Deus.Dang_States] .!= 0.0)
     Ergodicity = 100 - 100*rel_dangs/length(fnd)
 
-    Label(G_A[1,1], 
-            textsize = 20, 
+    Label(G_A[1,1],
+            textsize = 20,
             halign = :center,
             valign = :center,
             justification = :left,
@@ -3150,8 +3150,8 @@ function Draw_Plots(Deus::ϵ_Machine)
             "Topological transition Complexity\n"*
             "Metric transition Complexity")
 
-    Label(G_A[1,2], 
-    textsize = 20, 
+    Label(G_A[1,2],
+    textsize = 20,
     halign = :center,
     valign = :center,
     justification = :left,
@@ -3164,7 +3164,7 @@ function Draw_Plots(Deus::ϵ_Machine)
             "Cμ\n"*
             "Ce\n"*
             "Cμe")
-    
+
     vals = Array{Float64, 1}(undef, 8)
     vals[1] = Deus.IG
     vals[2] = Ergodicity
@@ -3178,8 +3178,8 @@ function Draw_Plots(Deus::ϵ_Machine)
     str = Array{string, 1}
     str = string.(vals)
 
-    Label(G_A[1,3], 
-    textsize = 20, 
+    Label(G_A[1,3],
+    textsize = 20,
     halign = :center,
     valign = :center,
     justification = :left,
@@ -3193,8 +3193,8 @@ function Draw_Plots(Deus::ϵ_Machine)
             str[7]*"\n"*
             str[8])
 
-    Label(G_A[1,4], 
-    textsize = 20, 
+    Label(G_A[1,4],
+    textsize = 20,
     halign = :center,
     valign = :center,
     justification = :left,
@@ -3208,9 +3208,9 @@ function Draw_Plots(Deus::ϵ_Machine)
             "[Turings]\n"*
             "[Turings]")
 
-    pv_ax = Axis(G_A[2, 1:4], 
-                    title = "Stationary Probability Distribution", 
-                    xlabel = "States", 
+    pv_ax = Axis(G_A[2, 1:4],
+                    title = "Stationary Probability Distribution",
+                    xlabel = "States",
                     ylabel = "Probability")
 
     barplot!(pv_ax, 1:length(fnd), sort(Deus.pv[fnd]), color = :teal, strokecolor = :black, strokewidth = 0)
@@ -3229,23 +3229,23 @@ function Draw_Plots(Deus::ϵ_Machine)
 
     #_______________________________________________________________________________
 
-    hα_ax = Axis(G_B[1, 1], 
-                    title = "Rényi Entropy Rate", 
-                    xlabel = "α", 
+    hα_ax = Axis(G_B[1, 1],
+                    title = "Rényi Entropy Rate",
+                    xlabel = "α",
                     ylabel = "hα [bits/symbol]")
     lines!(hα_ax, Deus.α, Deus.hα, color = :green4)
     hα_ax.xticks = 0:0.1:1.0
 
-    Cα_ax = Axis(G_B[2, 1], 
-                    title = "State Complexity of Order - α", 
-                    xlabel = "α", 
+    Cα_ax = Axis(G_B[2, 1],
+                    title = "State Complexity of Order - α",
+                    xlabel = "α",
                     ylabel = "Cα [Turings]")
     lines!(Cα_ax, Deus.α, Deus.Cα, color = :dodgerblue)
     Cα_ax.xticks = 0:0.1:1.0
 
-    Cαe_ax = Axis(G_B[3, 1], 
-                    title = "Transition Complexity of Order - α", 
-                    xlabel = "α", 
+    Cαe_ax = Axis(G_B[3, 1],
+                    title = "Transition Complexity of Order - α",
+                    xlabel = "α",
                     ylabel = "Cαe [Turings]")
     lines!(Cαe_ax, Deus.α, Deus.Cαe, color = :navyblue)
     Cαe_ax.xticks = 0:0.1:1.0
@@ -3254,26 +3254,26 @@ function Draw_Plots(Deus::ϵ_Machine)
     rowsize!(G_B, 1, Fixed(150))
     rowsize!(G_B, 2, Fixed(150))
     rowsize!(G_B, 3, Fixed(150))
-    
+
     #_______________________________________________________________________________
 
-    Zα_ax = Axis(G_C[1, 1], 
-                    title = "Cylinder Partition Function", 
-                    xlabel = "α", 
+    Zα_ax = Axis(G_C[1, 1],
+                    title = "Cylinder Partition Function",
+                    xlabel = "α",
                     ylabel = "Ζα [bits]")
     lines!(Zα_ax, Deus.α, Deus.Zα, color = :purple)
     Zα_ax.xticks = 0:0.1:1.0
 
-    Hα_ax = Axis(G_C[2, 1], 
-                    title = "Cylinder Rényi Entropy", 
-                    xlabel = "α", 
+    Hα_ax = Axis(G_C[2, 1],
+                    title = "Cylinder Rényi Entropy",
+                    xlabel = "α",
                     ylabel = "Hα [bits]")
     lines!(Hα_ax, Deus.α, Deus.Hα, color = :turquoise3)
     Hα_ax.xticks = 0:0.1:1.0
 
-    Cμ_t_ax = Axis(G_C[3, 1], 
-                    title = "Knowledge Relaxation", 
-                    xlabel = "Time [seconds]", 
+    Cμ_t_ax = Axis(G_C[3, 1],
+                    title = "Knowledge Relaxation",
+                    xlabel = "Time [seconds]",
                     ylabel = "Cμ [bits]")
     lines!(Cμ_t_ax, Deus.t_m, Deus.Cμ_t, color = :red)
     minfnd = minimum(Deus.t_m)
@@ -3284,7 +3284,7 @@ function Draw_Plots(Deus::ϵ_Machine)
     colsize!(G_C, 1, Fixed(300))
 
     #_______________________________________________________________________________
-    
+
     return nothing
 end
 
@@ -3298,10 +3298,10 @@ function All_Plots(Deus::ϵ_Machine)
     maxfnd = maximum(fnd)
     lfnd = convert(Int64, ceil(length(fnd)/10))
 
-    p1 = bar(1:length(fnd), sort(Deus.pv[fnd]), 
+    p1 = bar(1:length(fnd), sort(Deus.pv[fnd]),
         xticks = 1:lfnd:length(fnd),
-        title = "Stationary Probability Distribution", 
-        xlabel = "States", 
+        title = "Stationary Probability Distribution",
+        xlabel = "States",
         ylabel = "Probability",
         linecolor = :turquoise3,
         color = :turquoise3,
@@ -3309,8 +3309,8 @@ function All_Plots(Deus::ϵ_Machine)
     display(p1)
 
     p2 = plot(Deus.α, Deus.hα,
-            title = "Rényi Entropy Rate", 
-            xlabel = "α", 
+            title = "Rényi Entropy Rate",
+            xlabel = "α",
             ylabel = "hα [bits/symbol]",
             color = :green4,
             legend = false,
@@ -3319,8 +3319,8 @@ function All_Plots(Deus::ϵ_Machine)
     display(p2)
 
     p3 = plot(Deus.α, Deus.Cα,
-            title = "State Complexity of Order - α", 
-            xlabel = "α", 
+            title = "State Complexity of Order - α",
+            xlabel = "α",
             ylabel = "Cα [Turings]",
             color = :dodgerblue,
             legend = false,
@@ -3329,15 +3329,15 @@ function All_Plots(Deus::ϵ_Machine)
     display(p3)
 
     p4 = plot(Deus.α, Deus.Cαe,
-            title = "Transition Complexity of Order - α", 
-            xlabel = "α", 
+            title = "Transition Complexity of Order - α",
+            xlabel = "α",
             ylabel = "Cαe [Turings]",
             color = :dodgerblue,
             legend = false,
             grid = true,
             gridlinewidth = 2)
     display(p4)
-        
+
     return nothing
 end
 
@@ -3348,7 +3348,7 @@ function Draw_Graph(Net, nodekey, N; run = 0)
     Ts = SimpleGraph(Net) # create graph object from Connecitivity Matrix
 
     Graph_fig[1, 1] = graph_ax = Axis(Graph_fig)
-    
+
     nodecolours = Array{Symbol, 1}(undef, L)
     nodecolours = fill!(nodecolours, :blue)
 
@@ -3362,7 +3362,7 @@ function Draw_Graph(Net, nodekey, N; run = 0)
             #curve_distance =-.5,
             #curve_distance_usage = true
             )
-    
+
     #Circular_Layout(p, graph_ax, L)
     Plane_Layout(p, graph_ax, L)
     #p.layout = Spring(Ptype = Float32)
@@ -3384,7 +3384,7 @@ function Draw_Graph(Net, nodekey, N; run = 0)
         for n in 1:L
 
             if nodekey[n, t] == 0
-                nodecolours[n] = :green4   
+                nodecolours[n] = :green4
             elseif nodekey[n, t] == 1
                 nodecolours[n] = :dodgerblue
             elseif nodekey[n, t] == 2
@@ -3403,18 +3403,6 @@ function Draw_Graph(Net, nodekey, N; run = 0)
             sleep(0.05)
         end
     end
-       
+
     return nothing
 end
-
-
-
-
- 
-
-
-
-    
-
-
-

@@ -1,5 +1,6 @@
-using DrWatson
-@quickactivate "dare"
+using Complexity
+using DifferentialEquations
+using DataFrames
 
 print("\n...........o0o----ooo0o0ooo~~~  START  ~~~ooo0o0ooo----o0o...........\n\n")
 
@@ -81,7 +82,7 @@ plot(df, x = :u1, y = :u2)
 
 colrs = Array{Symbol, 1}(undef, Deus.k)
 for i in 1:Deus.k
-    
+
     if Deus.s[i] == 0
         colrs[i] = :red
     elseif Deus.s[i] == 1
@@ -92,7 +93,7 @@ for i in 1:Deus.k
 end
 
 
-#= traj = plot(Deus.x[1, 500:end], Deus.x[2, 500:end], 
+#= traj = plot(Deus.x[1, 500:end], Deus.x[2, 500:end],
             seriestype = :scatter,
             markercolor = colrs[500:end],
             markersize = 1,
