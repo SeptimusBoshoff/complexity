@@ -33,25 +33,33 @@ println("...........o0o----ooo0§0ooo~~~  START  ~~~ooo0§0ooo----o0o...........
 # Parameters
 
 T = 100 # horison
-J = 200 # episodes
+J = 1000 # episodes
 
-γ = 0.98 # discounting factor
+γ = 0.99 # discounting factor
 
 # kernel bandwidth, scale
-ζ = 0.5
+ζ = 1.0
 
 # actor step size
-η = 0.01
+η = 0.001
 
-σ = 0.03 # standard deviation
+σ = 0.1 # standard deviation
+
+M = 10
 
 # initial condition ranges
-x_range = 0.01*[-1.2, 0.5]
-v_range = 0.01*[-0.07, 0.07]
+x_range = [-1.2, 0.5]
+v_range = [-0.07, 0.07]
+
+xtrain = zeros(2, 10*T)
+
+for i in 1:10*T
+    xtrain[:,i] = [rand(Uniform(x_range[1], x_range[2])), rand(Uniform(v_range[1], v_range[2]))/0.07]
+end
 
 # initial actor weights
-#actor_Λ = [0]
-#actor_C = zeros(2)
+actor_Λ = [0]
+actor_C = zeros(2)
 
 #-------------------------------------------------------------------------------------------
 # dataframes
@@ -60,26 +68,34 @@ sample_hook = DataFrame()
 inner_hook = DataFrame()
 episode_hook = DataFrame()
 
+learn_hook = DataFrame()
+
 #-------------------------------------------------------------------------------------------
 # Learning
 
-f = zeros(T)
+∇J = zeros(1,10*T)
 
+m = 1
 j = 1
 for j in 1:J # episodes
 
-    global x, actor_Λ, actor_C, η, ζ, γ, σ, episode_hook, inner_hook, sample_hook
+    global x, actor_Λ, actor_C, η, ζ, γ, σ, ∇J, m, M
+    global episode_hook, inner_hook, sample_hook, learn_hook
 
     # initial conditions
 
-    #x = [rand(Uniform(x_range[1], x_range[2])), rand(Uniform(v_range[1], v_range[2]))]
+    x = [rand(Uniform(x_range[1], x_range[2])), 0]
 
-    x = [-0.5, 0] #+ 0.01*randn(2)
+    #x = [-0.5, 0]
 
     # policy parameters
 
     if j < J/2
-        #σ = σ/J # standard deviation
+
+        σ = σ*0.99 # standard deviation
+
+        if σ < 0.01 σ = 0.01 end
+
     end
 
     Σ = (σ^2)*Matrix(I,1,1) # covariance matrix
@@ -87,10 +103,11 @@ for j in 1:J # episodes
 
     for k in 1:T # time steps
 
-        global x, actor_Λ, actor_C, episode_hook, inner_hook, sample_hook
+        global x, actor_Λ, actor_C, η, ζ, γ, σ, ∇J, m, M
+        global episode_hook, inner_hook, sample_hook, learn_hook
 
         # mean vector
-        μ = function_approximation(x, actor_Λ, actor_C, ζ)
+        μ = function_approximation([x[1]; x[2]/0.07], actor_Λ, actor_C, ζ)
 
         # Create the multivariate normal distribution
         π_ax = MvNormal([μ], Σ)
@@ -100,7 +117,7 @@ for j in 1:J # episodes
 
         reward = exp(-8*(x[1] - 0.6)^2)
 
-        sample_hook = DataFrame(t = k, x = x[1], v = x[2], a = a, μ = μ, r = reward)
+        sample_hook = DataFrame(t = k, x = x[1], v = x[2]/0.07, a = a, μ = μ, r = reward)
         append!(inner_hook, sample_hook)
 
         if x[1] >= 0.5
@@ -108,14 +125,17 @@ for j in 1:J # episodes
         end
 
         # evolve
-        #a = 1.0
         x = Mountain_Car(x, a)
 
-    end
+        if x[1] >= 0.5
+            #println("Success")
+            rewards_data = @views inner_hook[:,6]
+            #println("rewards = ", round(1000*sum(rewards_data), digits = 3))
+            #println("position = ", round(x[1], digits = 3))
+            #println("velocity = ", round(x[2], digits = 3))
+        end
 
-    #σ = 0.01 # standard deviation
-    #Σ = (σ^2)*Matrix(I,2,2) # covariance matrix
-    #Σinv = inv(Σ) # for compatible kernel
+    end
 
     state_data = @views transpose(Matrix(inner_hook[:,2:3]))
     action_data = @views transpose(inner_hook[:,4])
@@ -124,26 +144,49 @@ for j in 1:J # episodes
 
     data = @views (state_data, action_data, mean_data)
 
-    α, Q, D, b = KLSTD(data, rewards_data, ζ, Σinv, γ)
+    Q = Q_MC(γ, rewards_data)
 
-    #display(Q)
+    ∇J += SGA(data, ζ, Σinv, Q, xtrain)
 
-    if j < J/1
-        #η = η/J
+    if m >= M
+
+        f_μ = zeros(10*T)
+
+        for i in 1:10*T
+            f_μ = function_approximation(xtrain[:,i], actor_Λ, actor_C, ζ)
+        end
+
+        f_μ = f_μ .+ η*(1/M)*∇J
+
+        f_μ = clamp.(f_μ, -1, 1)
+
+        actor_Λ, actor_C, err = OMP(xtrain, ζ, f_μ; N = 100)
+
+        println("rewards = ", round(1000*sum(rewards_data), digits = 3))
+        println("error = ", round(err, digits = 3))
+        println("mean change = ", round(mean( η*(1/M)*∇J), digits = 3))
+        println("j = ", j)
+
+        ∇J = zeros(1,10*T)
+        m = 1
+
+    else
+
+        m += 1
     end
 
-    f_μ = SGA(data, ζ, Σinv, η, Q)
+    if j == 1
 
-    f_μ = clamp.(f_μ, -1, 1)
+        actor_Λ, actor_C, err = OMP(data[1], ζ, data[3]; N = 15)
+    end
 
-    actor_Λ, actor_C, err = OMP(data[1], ζ, f_μ; N = 15)
+    #println("rewards = ", round(1000*sum(rewards_data), digits = 3))
+    #println("max Q = ", maximum(Q))
+    #println("min Q = ", minimum(Q))
+    #println("j = ", j)
 
-    println("rewards = ", round(1000*sum(rewards_data), digits = 3))
-    println("error = ", round(err, digits = 3))
-    println("jump = ", maximum(f_μ .- data[3]))
-    println("jump Q = ", maximum(Q))
-    println("jump Q = ", minimum(Q))
-    println("j = ", j)
+    empty!(learn_hook)
+    learn_hook = DataFrame(Q = vec(Q))
 
     if isnan(Q[1])
 
@@ -158,88 +201,7 @@ for j in 1:J # episodes
     end
     empty!(inner_hook)
 
-    #= fn = zeros(T)
-    for k in 1:T
-
-        fn[k] = function_approximation(data[1][:,k], Λ, C, ζ)
-    end =#
-
-    #=
-        G1  = Gramian(data[1], ζ)
-        G2  = Gramian(data, ζ; kernel = Compatible_kernel, Σinv = Σinv)
-
-        z₁ = (data[1][:,1], data[2][:,1], data[3][:,1])
-        z₂ = (data[1][:,5], data[2][:,5], data[3][:,5])
-
-        k1 = Gaussian_kernel(z₁[1], z₂[1], ζ, dims = 2)
-
-        k = Compatible_kernel(z₁, z₂, ζ; kernel = Gaussian_kernel, Σinv = Σinv)
-    =#
-
 end
-
-#= ϵ = 1e-6
-
-G = Gramian([data[1]; data[2]], ζ)
-
-T = size(data[1], 2)
-
-D1 = zeros(T, T)
-b1 = zeros(T)
-
-for k in 1:T
-
-    global D1, b1, γ
-
-    D1 += G[:,k]*transpose(G[:,k] - γ*G[:,k])
-    b1 += G[:,k]*rewards_data[k]
-
-end
-
-b2 = sum(G.*transpose(rewards_data), dims = 2)
-D2 = G.*transpose(G - γ*G)
-
-α1 = (D1 + ϵ*I) \ b1 # inv(D1)*b1
-
-Q1 = zeros(T)
-
-for k in 1:T
-
-    Q1[k] = α1[k]*sum(G[k,:])
-
-end
-
-ϑ = Array{Float64,1}(undef, T) # feature vector
-
-dat = [data[1]; data[2]]
-
-for n in 1:T
-
-    ϑ[n] = Gaussian_kernel(dat[:,n], dat[:,1], ζ)
-
-end
-
-Q3 = transpose(α1)*ϑ
-
-Q2 = transpose(α1)*transpose(G) =#
-
-
-#= #σ = 0.01 # standard deviation
-Σ = (σ^2)*Matrix(I,2,2) # covariance matrix
-Σinv = inv(Σ) # for compatible kernel
-
-state_data = @views transpose(Matrix(episode_hook[:,2:3]))
-action_data = @views transpose(episode_hook[:,4])
-mean_data = @views transpose(episode_hook[:,5])
-rewards_data = @views episode_hook[:,6]
-
-data = @views (state_data, action_data, mean_data)
-
-α, Q, D, b = KLSTD(data, rewards_data, ζ, Σinv, γ)
-
-f_μ = SGA(data, ζ, Σinv, η, Q; kernel = Gaussian_kernel)
-
-actor_Λ, actor_C, err = OMP(data[1], ζ, f_μ; N = 20) =#
 
 #-------------------------------------------------------------------------------------------
 # Plots
@@ -247,7 +209,9 @@ actor_Λ, actor_C, err = OMP(data[1], ζ, f_μ; N = 20) =#
 traces = [scatter(episode_hook, x = :t, y = :x, name = "position"),
             scatter(episode_hook, x = :t, y = :v, name = "velocity"),
             scatter(episode_hook, x = :t, y = :r, name = "reward"),
-            scatter(episode_hook, x = :t, y = :a, name = "actions"),]
+            scatter(episode_hook, x = :t, y = :a, name = "actions"),
+            scatter(episode_hook, x = :t, y = :μ, name = "mean"),
+            scatter(learn_hook, x = :t, y = :Q, name = "Q"),]
 
 plot_episode = plot(traces,
                 Layout(

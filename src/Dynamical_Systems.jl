@@ -125,3 +125,17 @@ function Mountain_Car(x, a)
 
     return [x_next, v_next]
 end
+
+function pendulum(x, a; max_speed = 8, max_torque = 2.0, g = 9.81, m = 1.0, l = 1.0, dt = 0.05)
+
+    θ = x[1]
+    ω = x[2]
+
+    a = clamp(a[1], -max_torque, max_torque)
+
+    ω_next = ω + ((3 * g / (2 * l)) * sin(θ) + (3.0 / (m * l^2) * a[1])) * dt
+    ω_next = clamp(ω_next, -max_speed, max_speed)
+    θ_next = θ + ω_next * dt
+
+    return [θ_next, ω_next]
+end

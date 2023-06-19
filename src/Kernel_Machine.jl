@@ -1050,15 +1050,20 @@ function Gaussian_kernel(x₁, x₂, scale; dims = -1)
     end
 end
 
+function Compatible_kernel(z₁, z₂, scale; kernel = Gaussian_kernel, Σinv = nothing)
+
+    dims = length(z₁[2])
+
+    k_z₁_z₂ = transpose(transpose(kernel(z₁[1], z₂[1], scale, dims = dims))*Σinv*(z₁[2] - z₁[3]))*(Σinv*(z₂[2] - z₂[3]))
+
+    #k_z₁_z₂ = transpose(transpose(kernel(x₁, x₂, ζ, dims = dims))*Σinv*(a₁ - μ₁))*(Σinv*(a₂ - μ₂))
+
+    return k_z₁_z₂
+end
+
 function Gramian(data, scale; kernel = Gaussian_kernel, Σinv = nothing)
 
     if !isa(data, Tuple)
-
-        if size(data,2) == 1
-
-            data = transpose(data)
-
-        end
 
         n = size(data, 2)
     else
@@ -1092,7 +1097,7 @@ function Gramian(data, scale; kernel = Gaussian_kernel, Σinv = nothing)
                 z₁ = (data[1][:,i], data[2][:,i], data[3][:,i])
                 z₂ = (data[1][:,j], data[2][:,j], data[3][:,j])
 
-                G[i, j] = Compatible_kernel(z₁, z₂, scale; kernel = Gaussian_kernel, Σinv = Σinv)
+                G[i, j] = kernel(z₁, z₂, scale; kernel = Gaussian_kernel, Σinv = Σinv)
 
             else
 
@@ -1115,7 +1120,7 @@ function Gramian(data, scale; kernel = Gaussian_kernel, Σinv = nothing)
                 z₁ = (data[1][:,i], data[2][:,i], data[3][:,i])
                 z₂ = (data[1][:,j], data[2][:,j], data[3][:,j])
 
-                G[i, j] = Compatible_kernel(z₁, z₂, scale; kernel = Gaussian_kernel, Σinv = Σinv)
+                G[i, j] = kernel(z₁, z₂, scale; kernel = Gaussian_kernel, Σinv = Σinv)
 
             else
                 G[i, j] = kernel(data[:,i], data[:,j], scale)
@@ -1129,7 +1134,15 @@ function Gramian(data, scale; kernel = Gaussian_kernel, Σinv = nothing)
 
     Threads.@threads for i in 1:n
 
-        G[i, i] = Gaussian_kernel(data[:,i], data[:,i], scale)
+        if kernel == Compatible_kernel
+
+            z₁ = (data[1][:,i], data[2][:,i], data[3][:,i])
+
+            G[i, i] = kernel(z₁, z₁, scale; kernel = Gaussian_kernel, Σinv = Σinv)
+
+        else
+            G[i, i] = kernel(data[:,i], data[:,i], scale)
+        end
 
     end
 
@@ -1138,65 +1151,101 @@ function Gramian(data, scale; kernel = Gaussian_kernel, Σinv = nothing)
     return G
 end
 
-function Compatible_kernel(z₁, z₂, scale; kernel = Gaussian_kernel, Σinv = nothing)
+function KLSTD(data, C, rewards, scale, γ, j; kernel = Gaussian_kernel, ϵ = 1e-6, Σinv = nothing)
 
-    dims = length(z₁[2])
+    if kernel == Gaussian_kernel
 
-    k_z₁_z₂ = transpose(transpose(kernel(z₁[1], z₂[1], scale, dims = dims))*Σinv*(z₁[2] - z₁[3]))*(Σinv*(z₂[2] - z₂[3]))
+        D = size(C, 2)
+        T = size(data, 2)
+    else
 
-    #k_z₁_z₂ = transpose(transpose(kernel(x₁, x₂, ζ, dims = dims))*Σinv*(a₁ - μ₁))*(Σinv*(a₂ - μ₂))
-
-    return k_z₁_z₂
-end
-
-function KLSTD(data, rewards, scale, Σinv, γ; ϵ = 1e-6)
-
-    G = Gramian(data, scale; kernel = Compatible_kernel, Σinv = Σinv)
-
-    T = size(data[1], 2)
-
-    D = zeros(T, T)
-    b = zeros(T)
-
-    for k in 1:T
-
-        D += G[:,k]*transpose(G[:,k] - γ*G[:,k])
-        b += G[:,k]*rewards[k]
-
+        D = size(C[1], 2)
+        T = size(data[1], 2)
     end
 
-    α = (D + ϵ*I) \ b # inv(D)*b
+    ϑₖ = Array{Float64,1}(undef, D) # current feature vector
+    ϑₙ  = Array{Float64,1}(undef, D) # next feature vector
 
-    Q = zeros(T)
+    A = zeros(D, D)
+    b = zeros(D)
 
-    for k in 1:T
+    for k in 1:T-1
 
-        Q[k] = α[k]*sum(G[k,:])
+        if k%(T/j) != 0
 
-    end
+            for d in 1:D
 
-    return α, Q, D, b
+                if kernel == Gaussian_kernel
 
-end
+                    ϑₖ[d] = kernel(C[:,d], data[:, k], scale)
+                    ϑₙ[d] = kernel(C[:,d], data[:, k + 1], scale)
 
-function function_approximation(x, Λ, C, scale; kernel = Gaussian_kernel)
+                else
 
-    if isa(Λ, Vector)
+                    ϑₖ[d] = kernel((C[1][:,d], C[2][:,d], C[3][:,d]),
+                                    (data[1][:, k], data[2][:, k], data[3][:, k]),
+                                    scale, Σinv = Σinv)
+                    ϑₙ[d] = kernel((C[1][:,d], C[2][:,d], C[3][:,d]),
+                                    (data[1][:, k + 1], data[2][:, k + 1], data[3][:, k + 1]),
+                                    scale, Σinv = Σinv)
 
-        N = length(Λ)
-        ϑ = Array{Float64,1}(undef, N) # feature vector
-        f_x = 0
-
-        for n in 1:N
-
-            if isa(x, Vector)
-                ϑ[n] = kernel(C[:,n], x, scale)
-            else
-                ϑ[n] = kernel(C[:,n], [x], scale)
+                end
             end
+
+            A += ϑₖ*transpose(ϑₖ - γ*ϑₙ)
+            b += ϑₖ*rewards[k]
         end
 
-        f_x = (transpose(Λ)*ϑ)[1]
+    end
+
+    if T > 1
+        α = (A + ϵ*I) \ b # inv(A)*b
+    else
+        α = b
+    end
+
+    return transpose(α)
+end
+
+function function_approximation(x, Λ, C, scale; kernel = Gaussian_kernel, Σinv = nothing)
+
+    if kernel == Gaussian_kernel
+
+        if isa(Λ, Vector)
+
+            N = length(Λ)
+            ϑ = Array{Float64,1}(undef, N) # feature vector
+            f_x = 0
+
+            for n in 1:N
+
+                if isa(x, Vector)
+                    ϑ[n] = kernel(C[:,n], x, scale)
+                else
+                    ϑ[n] = kernel(C[:,n], [x], scale)
+                end
+            end
+
+            f_x = (transpose(Λ)*ϑ)[1]
+
+        else
+
+            N = size(Λ, 2)
+            ϑ = Array{Float64,1}(undef, N) # feature vector
+            f_x = zeros(size(Λ, 1))
+
+            for n in 1:N
+
+                if isa(x, Vector)
+                    ϑ[n] = kernel(C[:,n], x, scale)
+                else
+                    ϑ[n] = kernel(C[:,n], [x], scale)
+                end
+
+            end
+
+            f_x = Λ*ϑ
+        end
 
     else
 
@@ -1206,11 +1255,9 @@ function function_approximation(x, Λ, C, scale; kernel = Gaussian_kernel)
 
         for n in 1:N
 
-            if isa(x, Vector)
-                ϑ[n] = kernel(C[:,n], x, scale)
-            else
-                ϑ[n] = kernel(C[:,n], [x], scale)
-            end
+            z₁ = (C[1][:,n], C[2][:,n], C[3][:,n])
+
+            ϑ[n] = kernel(z₁, x, scale; kernel = Gaussian_kernel, Σinv = Σinv)
 
         end
 
@@ -1225,37 +1272,48 @@ function function_approximation(x, Λ, C, scale; kernel = Gaussian_kernel)
 
 end
 
-function SGA(data, scale, Σinv, η, Q; kernel = Gaussian_kernel)
+function SGA(data, scale, Σinv, η, critic_Λ, critic_C)
+
+    G  = Gramian(data[1], scale; kernel = Gaussian_kernel)
+    #∇J = G*transpose(Q.*(Σinv*(data[2] .- data[3])))
+    #f_μ = data[3] .+ η*transpose(G*transpose(Q.*(Σinv*(data[2] .- data[3]))))
 
     T = size(data[1], 2)
 
-    f = zeros(T)
+    ∇J = zeros(T)
+    Q = Array{Float64,1}(undef, T)
 
-    G  = Gramian(data[1], scale; kernel = kernel)
+    for k in 1:T
 
-    for i in 1:T
+        Q[k] = function_approximation((data[1][:,k], data[2][:,k], data[3][:,k]),
+                                    critic_Λ, critic_C, scale,
+                                    kernel = Compatible_kernel, Σinv = Σinv)
 
-        for k in 1:T
+        #= Q[k] = function_approximation(vcat(data[1][:,k], data[2][:,k]),
+                                    critic_Λ, critic_C, scale) =#
 
-            #= println("Q[i] = ", Q[i])
-            println("G[k,i] = ", G[k,i])
-            println("Σinv = ", Σinv)
-            println("(data[2][:,k] - data[3][:,k]) = ", (data[2][:,k] - data[3][:,k])) =#
+        for j in 1:T
 
-            f[i] += (Q[i]*G[k,i]*Σinv*(data[2][:,k] - data[3][:,k]))[1]
+            #= println("Σinv = ")
+            display(Σinv)
+            println("\ndata[2][:,k] - data[3][:,k] = ")
+            display(data[2][:,k] - data[3][:,k]) =#
+
+            ∇J[k] += (Q[k]*Gaussian_kernel(data[1][:,k], data[1][:,j], scale)*Σinv*(data[2][:,k] - data[3][:,k]))[1]
 
         end
-
-        #println("Q[i] = ", Q[i])
-
-        f[i] = (data[3][:,i])[1] + η*f[i]
-
     end
 
-    return f
+    f_μ = data[3] .+ η*transpose(∇J)
+
+    #f2 = data[3] .+ η*transpose(G*(transpose(Q).*(Σinv*(data[2] .- data[3]))))
+
+    # ∇J = G*transpose(Q.*(Σinv*(data[2] .- data[3])))
+
+    return f_μ#, (G*transpose(transpose(Q).*(Σinv*(data[2] .- data[3])))), ∇J
 end
 
-function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ = 1e-6)
+function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ = 1e-6, Σinv = nothing)
 
     if size(Y,2) == 1
         Y = transpose(Y)
@@ -1264,12 +1322,23 @@ function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ
         data = transpose(data)
     end
 
-    U = Gramian(data, scale; kernel = kernel)
-    G = copy(U)
+    if kernel == Gaussian_kernel
+
+        U = Gramian(data, scale; kernel = kernel)
+        G = copy(U)
+
+        d = size(data,1)
+
+    elseif kernel == Compatible_kernel
+
+        U = Gramian(data, scale; kernel = kernel, Σinv = Σinv)
+        G = copy(U)
+
+        d = size(data[1],1)
+    end
 
     T = size(U,1)
     m = size(Y,1)
-    d = size(data,1)
 
     for i in 1:T
 
@@ -1277,7 +1346,9 @@ function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ
 
     end
 
-    error_1 = norm(Y)
+    error_ic = norm(Y)
+
+    if error_ic == 0 error_ic = 1e-6 end
 
     if isnothing(N)
 
@@ -1299,7 +1370,14 @@ function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ
 
                 ids = vcat(ids, index)
                 Φ = hcat(Φ, G[:,ids[n]])
-                C = hcat(C, copy(data[:,ids[n]]))
+
+                if isa(data, Tuple)
+
+                    C = hcat(C, copy(data[1][:,ids[n]]))
+                else
+
+                    C = hcat(C, copy(data[:,ids[n]]))
+                end
 
                 #Λ[:,1:n] = Y*pinv(transpose(Φ[:,1:n]))
                 Λ = Y*inv(Φ*transpose(Φ) + ϵ*I)*Φ
@@ -1312,7 +1390,14 @@ function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ
 
                 ids[1] = index
                 Φ[:,1] = G[:,ids[1]]
-                C[:,1] = copy(data[:,ids[1]])
+
+                if isa(data,Tuple)
+
+                    C[:,1] = copy(data[1][:,ids[1]])
+                else
+
+                    C[:,1] = copy(data[:,ids[1]])
+                end
 
                 #Λ[:,1:n] = Y*pinv(transpose(Φ[:,1:n]))
                 Λ = Y*inv(Φ*transpose(Φ) + ϵ*I)*Φ
@@ -1320,7 +1405,7 @@ function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ
 
             R = Y - Λ*transpose(Φ)
 
-            error = 100*norm(R)/error_1
+            error = 100*norm(R)/error_ic
 
             if n == T
                 break;
@@ -1331,12 +1416,18 @@ function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ
 
     else
 
+        N = clamp(N, 1, T)
+
         Φ = Array{Float64,2}(undef, T, N)
-        C = Array{Float64,2}(undef, d, N)
+
+        if isa(data,Tuple)
+            C = (Array{Float64,2}(undef, d, N), Array{Float64,2}(undef, m, N), Array{Float64,2}(undef, m, N))
+        else
+            C = Array{Float64,2}(undef, d, N)
+        end
+
         ids = Array{Int64,1}(undef, N)
         Λ = Array{Float64,2}(undef, m, N)
-
-        N = clamp(N, 1, T)
 
         for n in 1:N
 
@@ -1358,7 +1449,16 @@ function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ
 
             ids[n] = index
             Φ[:,n] = G[:,ids[n]]
-            C[:,n] = copy(data[:,ids[n]])
+
+            if isa(data,Tuple)
+
+                C[1][:,n] = copy(data[1][:,ids[n]])
+                C[2][:,n] = copy(data[2][:,ids[n]])
+                C[3][:,n] = copy(data[3][:,ids[n]])
+            else
+
+                C[:,n] = copy(data[:,ids[n]])
+            end
 
             #Λ[:,1:n] = Y*pinv(transpose(Φ[:,1:n]))
             Λ[:,1:n] = Y*inv(Φ[:,1:n]*transpose(Φ[:,1:n]) + ϵ*I)*Φ[:,1:n]
@@ -1367,10 +1467,72 @@ function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ
 
         R = Y - Λ*transpose(Φ)
 
-        error = 100*norm(R)/error_1
+        error = 100*norm(R)/error_ic
     end
 
     #f = Λ*transpose(Φ)
 
     return Λ, C, error
+end
+
+function ALD(data, μ, scale; kernel = Gaussian_kernel, ϵ = 1e-6, Σinv = nothing)
+
+    if kernel == Gaussian_kernel
+
+        G = Gramian(data, scale; kernel = kernel)
+
+        C = Array{Float64,2}(undef, size(data, 1), 1)
+        C[:,1] = data[:, 1]
+
+        ids = Array{Int64,1}(undef, 1)
+        ids[1] = 1
+
+    else
+
+        G = Gramian(data, scale; kernel = kernel, Σinv = Σinv)
+
+        C_state = Array{Float64,2}(undef, size(data[1], 1), 1)
+        C_action = Array{Float64,2}(undef, size(data[2], 1), 1)
+        C_mean = Array{Float64,2}(undef, size(data[3], 1), 1)
+
+        C_state[:, 1] = data[1][:, 1]
+        C_action[:, 1] = data[2][:, 1]
+        C_mean[:, 1] = data[3][:, 1]
+
+        ids = Array{Int64,1}(undef, 1)
+        ids[1] = 1
+
+    end
+
+    T = size(G, 1)
+
+    for k in 2:T
+
+        cₖ = (G[ids, ids] + ϵ*I) \ G[ids, k] #inv(G[ids,ids])*G[ids,k]
+        δₖ = G[k, k] - transpose(G[ids, k])*cₖ
+
+        if δₖ > μ
+
+            if kernel == Gaussian_kernel
+
+                C = hcat(C, data[:,k])
+                ids = vcat(ids, k)
+
+            else
+
+                C_state = hcat(C_state, data[1][:, k])
+                C_action = hcat(C_action, data[2][:, k])
+                C_mean = hcat(C_mean, data[3][:, k])
+
+                ids = vcat(ids, k)
+            end
+        end
+    end
+
+    if kernel == Gaussian_kernel
+
+        return C, 100*length(ids)/T, G[ids,ids]
+    else
+        return (C_state, C_action, C_mean), 100*length(ids)/T, G[ids, ids]
+    end
 end
