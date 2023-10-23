@@ -7,7 +7,7 @@ println("...........o0o----ooo0§0ooo~~~  START  ~~~ooo0§0ooo----o0o...........
 m = 1000
 
 # regularisation parameter
-ε = 10e-4
+ε = 1e-8
 
 # data
 x = Array{Int64, 1}(undef, m)
@@ -81,8 +81,8 @@ ky = transpose(Φ)*ϕ
 ωx = (Gˣ + ε*I)\kx
 ωy = (Gʸ + ε*I)\ky
 
-Ωx = (Gˣ + ε*I)\Gˣ
-Ωy = (Gʸ + ε*I)\Gʸ
+Ωx = (Gˣ + m*ε*I)\Gˣ
+Ωy = (Gʸ + m*ε*I)\Gʸ
 
 # centered weight vector
 ωxₕ = (H*Gˣ + m*ε*I)\(H*kx)
@@ -92,14 +92,15 @@ ky = transpose(Φ)*ϕ
 Ωyₕ = (H*Gʸ + m*ε*I)\(H*Gʸ)
 
 # kernel conditional mean
-μy_x = Φ*ωx
-μx_y = Υ*ωy
+μy_x = Φ*ωx # Φ*inv(Gˣ + m*ε*I)*transpose(Υ) # Cyx*inv(Cxx + ε*I)
+μx_y = Υ*ωy # Υ*inv(Gʸ + m*ε*I)*transpose(Φ) # Cxy*inv(Cyy + ε*I)
 
 # state similarity matrix
 Gsˣ = transpose(ωx)*Gʸ*ωx
+Gsˣₕ = transpose(ωxₕ)*Gʸ*ωxₕ
 
 # (centered) kernel conditional mean
-μy_xₕ = Φ*ωxₕ
+μy_xₕ = Φ*ωxₕ # Cyxₕ*inv(Cxxₕ + ε*I)
 μx_yₕ = Υ*ωyₕ
 
 check = Array{Float64, 1}(undef, 6)

@@ -48,8 +48,8 @@ window_size = npast + nfuture
 #-------------------------------------------------------------------------------------------
 # Training Data - time simulation
 
-num_eps = 1
-t_final_train = 200 # max simulation time (seconds)
+num_eps = 2
+t_final_train = 150 # max simulation time (seconds)
 
 u0 = [rand(Uniform(x₀_range[1], x₀_range[2]), num_eps),
         rand(Uniform(y₀_range[1], y₀_range[2]), num_eps)] # initial conditions
@@ -79,8 +79,8 @@ for i in 1:num_eps
     uₘ_train = reduce(hcat, xₘ_train.u)
 
     # positions
-    x_train = uₘ_train[1,:] .+ 0.00*randn(length(tₘ_train))
-    y_train = uₘ_train[2,:] .+ 0.00*randn(length(tₘ_train))
+    x_train = uₘ_train[1,:] .+ 0.1*randn(length(tₘ_train))
+    y_train = uₘ_train[2,:] .+ 0.1*randn(length(tₘ_train))
 
     data_train[i] = [vec(x_train), vec(y_train)]
 end
@@ -160,7 +160,7 @@ println("\nA. Training")
         # Find a reduced dimension embedding and extract the significant coordinates"
 
         println("\n\t3. Projection")
-        coords_train = spectral_basis(Gs, num_basis = 30)
+        coords_train = spectral_basis(Gs, num_basis = 50)
     end
 
     @timeit to "Forward Shift Operator" begin
@@ -226,7 +226,7 @@ println("\nB. Validation")
         @timeit to "Linear regression" begin
 
             # step 3. Build a probability distribution over states.
-            coords_ic = new_coords(Ks, Gs, coords_train)
+            coords_ic = new_coords(Ks, Gs, coords_train, alg = :ldiv)
 
         end
 
@@ -284,7 +284,7 @@ if num_nans > 0
 else
 
     tstart = tₘ_val[N_val - pred_hor + 1]
-    tend = tstart + (μ_m*(pred_hor + abs(num_nans) - 1))
+    tend = tstart + (μ_m*(pred_hor + abs(num_nans)))
 
     tₘ_DSS = tstart:μ_m:tend
 
@@ -365,7 +365,7 @@ plot_SS = plot(traces,
                     ),
                 )
 
-#display(plot_SS)
+display(plot_SS)
 
 # ******************************************************************************************
 # Diffusion (Reconstructed) State Space
@@ -413,7 +413,7 @@ plot_DSS_3d = plot(traces,
                     ),
                 )
 
-#display(plot_DSS_3d)
+display(plot_DSS_3d)
 
 # ******************************************************************************************
 # Koopman Modes Decomposition
@@ -456,7 +456,7 @@ plot_Λ2 = plot(Λ2,
                     ),
                 )
 
-#display(plot_Λ2)
+display(plot_Λ2)
 
 Ωo = scatter(x = real.(Ω[order[:]]),
             y = imag.(Ω[order[:]]),

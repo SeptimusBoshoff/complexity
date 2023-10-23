@@ -4,6 +4,8 @@ using DifferentialEquations
 using DataFrames
 using PlotlyJS
 using TimerOutputs
+using ArnoldiMethod
+using LinearAlgebra
 
 println("...........o0o----ooo0§0ooo~~~  START  ~~~ooo0§0ooo----o0o...........")
 
@@ -29,7 +31,7 @@ p = [μ]
 #-------------------------------------------------------------------------------------------
 # Machine parameters
 
-sampling = 5 # machine retain 1 in every so many samples - subsampling
+sampling = 10 # machine retain 1 in every so many samples - subsampling
 
 history = 10 # backward trajectory [seconds]
 future = 10 # forward trajectory [seconds]
@@ -50,7 +52,7 @@ u0 = [rand(Uniform(x₀_range[1], x₀_range[2])),
 u0 = [1.012, -0.88]
 #u0 = [-2, 10]
 
-t_final_train = 200 # max simulation time (seconds)
+t_final_train = 100 # max simulation time (seconds)
 
 # ******************************************************************************************
 
@@ -93,14 +95,13 @@ xₘ_train = sol_train(tₘ_train) # machine samples of the continuous system
 uₘ_train = reduce(hcat, xₘ_train.u)
 
 # positions
-x_train = uₘ_train[1,:] .+ 0.05*randn(length(uₘ_train[1,:]))#[uₘ_train[1,401:end]; uₘ_train[1,1:400]]#
-y_train = uₘ_train[2,:] .+ 0.05*randn(length(uₘ_train[2,:]))#[uₘ_train[2,401:end]; uₘ_train[2,1:400]]#
+x_train = uₘ_train[1,:] .+ 0.05*randn(length(uₘ_train[1,:]))
+y_train = uₘ_train[2,:] .+ 0.05*randn(length(uₘ_train[2,:]))
 
 data_train = [vec(x_train), vec(y_train)]
 
-
 #bandwidth, i.e. Kernel Scale
-scale = [maximum(data_train[1]) - minimum(data_train[1]);
+scale = 1*[maximum(data_train[1]) - minimum(data_train[1]);
         maximum(data_train[2]) - minimum(data_train[2])]
 
 # ******************************************************************************************
@@ -126,46 +127,31 @@ N = length(data_train[1]) # number of samples
 println("\nA. Training")
 @timeit to "Training" begin
 
+    println("\t1. Generating gram matrices")
     @timeit to "Generating gram matrices" begin
 
-        println("\n1. Generating gram matrices")
         Gx, Gy, index_map = series_Gxy(data_train, scale, npast, nfuture)
+
     end
 
+    println("\t2. Computing Gs")
     @timeit to "Computing Gs" begin
+
         # Compute the state similarity matrix.
         # Embedding to get the similarity matrix between conditional distributions
-        println("\n2. Computing Gs")
+
         Gs, embedder = embed_states(Gx, Gy)
-        #Gs, embedder = embed_states(Gx, Gy; ϵ = 1e-4, return_embedder = true)
 
     end
 
-    @timeit to "Projection" begin
-        # Compute a spectral basis for representing the causal states.
-        # Find a reduced dimension embedding and extract the significant coordinates"
-        println("\n3. Projection")
-        coords_train = spectral_basis(Gs, num_basis = 100)
-    end
+    println("\t3. Koopman Mode Decomposition")
+    @timeit to "Koopman Mode Decomposition" begin
 
-    @timeit to "Forward Shift Operator" begin
-        # This is the forward operator in diffusion state space. It is built from
-        # consecutive indices in the index map. Data series formed by multiple contiguous
-        # time blocks are supported, as well as the handling of NaN values
+        DMD, residual, φ = KMD(uₘ_train, Gs, index_map, residual = true, num_basis = 100, ε = 1e-8, alg = :RKHS)
+        println("\tResidual: ", round.(residual, digits = 3))
+        norm(real.(φ*transpose(DMD[1])) .- transpose(uₘ_train[:,index_map[1:end-1]]))
+        #DMD = KMD(uₘ_train, Gs, index_map, num_basis = 100, alg = :RKHS, ε = 1e-8)
 
-        println("\n4. Forward Shift Operator")
-        h_rank = 1
-        #shift_op = shift_operator(coords_train, alg = :GA)
-        DMD, SingleValueDecomposition  = shift_operator(coords_train, alg = :dmd, index_map = index_map) #svd_tr = 0.9985
-        #println("\tResidual: ", round.(s_residual, digits = 5))
-    end
-
-    @timeit to "Expectation Operator" begin
-        # This is the expectation operator, using its default function that predicts
-        # the first entry in the future sequence from the current state distribution.
-        # You can specify other functions, see the documentation
-        println("\n5. Expectation Operator")
-        expect_op, residual = expectation_operator(coords_train, index_map, data_train)
     end
 
 end
@@ -176,40 +162,42 @@ end
 println("\nB. Validation")
 @timeit to "Validation" begin
 
+    # initial conditions
+    ic = [data_val[1][1:npast],
+            data_val[2][1:npast]]
 
-    @timeit to "New coordinates" begin
-
-        npast_val = npast
-
-        # initial conditions
-        ic = [data_val[1][1:npast_val + h_rank - 1],
-                data_val[2][1:npast_val + h_rank - 1]]
+    println("\t4. Similarity vector")
+    @timeit to "Similarity vector" begin
 
         # step 1. Build a kernel similarity vector with sample data
-        Kx = series_newKx(ic, data_train, index_map, scale, npast_val)
-        # step 2. Embed to get similarity vector in state space
-        Ks = embed_Kx(Kx, Gx, embedder)
-        # step 3. Build a probability distribution over states.
-        coords_ic = new_coords(Ks, Gs, coords_train)
+        Kx = series_newKx(ic, data_train, index_map, scale, npast)
 
     end
 
-    @timeit to "Prediction" begin
+    println("\t5. Embed vector")
+    @timeit to "Embed vector" begin
 
-        pred_hor = length(tₘ_val) - npast_val # prediction horizon
+        # step 2. Embed to get similarity vector in state space
+        Ks = embed_Kx(Kx, Gx, embedder)
 
-        pred, coords_pred = predict(pred_hor, coords_ic[:, :], expect_op, DMD = DMD)
-        #pred, coords_pred = predict(pred_hor, coords_val[:, :], expect_op, shift_op = shift_op)
-        #,knn_convexity = 5, knndim = 10, coords = coords_train, extent = 0.05)
+    end
+
+    pred_hor = length(tₘ_val) - npast # prediction horizon
+
+    println("\t6. Prediction")
+    @timeit to "prediction" begin
+
+        pred = evolve(pred_hor, Ks, DMD)
+
     end
 
 end
 
 #-------------------------------------------------------------------------------------------
-nans = Array{Float64, 1}(undef, npast_val)
+nans = Array{Float64, 1}(undef, npast)
 nans = fill!(nans, NaN)
 
-nans2 = Array{Float64, 1}(undef, length(vec([nans; pred[1]])) - length(data_train[1]))
+nans2 = Array{Float64, 1}(undef, length(vec([nans; pred[1,:]])) - length(data_train[1]))
 nans2 = fill!(nans2, NaN)
 
 # State Spaces and Data Frames
@@ -217,18 +205,9 @@ SS = DataFrame(x_train = vec([data_train[1]; nans2]),
                 y_train = vec([data_train[2]; nans2]),
                 x_val = data_val[1],
                 y_val = data_val[2],
-                x_pred = vec([nans; pred[1]]),
-                y_pred = vec([nans; pred[2]]),
+                x_pred = vec([nans; pred[1,:]]),
+                y_pred = vec([nans; pred[2,:]]),
                 t = tₘ_val)
-
-nans = Array{Float64, 1}(undef, length(coords_pred[2,:]) - length(coords_train[2,:]))
-nans = fill!(nans, NaN)
-
-DSS = DataFrame(Ψ₁_train = vec([coords_train[2,:]; nans]),
-                Ψ₂_train = vec([coords_train[3,:]; nans]),
-                Ψ₁_pred = coords_pred[2,:],
-                Ψ₂_pred = coords_pred[3,:],
-                t = tₘ_val[npast_val + 1:end])
 
 #-------------------------------------------------------------------------------------------
 # Plots
@@ -257,27 +236,6 @@ plot_SS_t = plot(traces,
 display(plot_SS_t)
 
 # ******************************************************************************************
-# Diffustion State Space Time domain signals
-
-traces = [scatter(DSS, x = :t, y = :Ψ₁_train, name = "train-Ψ₁"),
-            scatter(DSS, x = :t, y = :Ψ₂_train, name = "train-Ψ₂"),
-            scatter(DSS, x = :t, y = :Ψ₁_pred, name = "pred-Ψ₁"),
-            scatter(DSS, x = :t, y = :Ψ₂_pred, name = "pred-Ψ₂")]
-
-plot_DSS_t = plot(traces,
-                Layout(
-                    title = attr(
-                        text = "Diffusion State Space: Evolution in Time",
-                        ),
-                    title_x = 0.5,
-                    xaxis_title = "t [s]",
-                    yaxis_title = "Ψ₁, Ψ₂",
-                    ),
-                )
-
-#display(plot_DSS_t)
-
-# ******************************************************************************************
 # State Space
 
 traces = [scatter(SS, x = :x_val, y = :y_val, name = "val", mode = "lines"),
@@ -299,52 +257,28 @@ plot_SS = plot(traces,
 
 display(plot_SS)
 
-
-# ******************************************************************************************
-# Diffusion (Reconstructed) State Space
-
-traces = [scatter(DSS, x = :Ψ₁_train, y = :Ψ₂_train, name = "train", mode = "lines"),
-        scatter(DSS, x = :Ψ₁_pred, y = :Ψ₂_pred, name = "pred", mode = "lines")]
-
-plot_DSS = plot(traces,
-                Layout(
-                    title = attr(
-                        text = "Diffusion State Space",
-                    ),
-                    title_x = 0.5,
-                    scene = attr(
-                        xaxis_title = "Ψ₁",
-                        yaxis_title = "Ψ₂",
-                    ),
-                    ),
-                )
-
-display(plot_DSS)
-
 # ******************************************************************************************
 # Koopman Modes Decomposition
-
-#= tr = 25
 
 order = sortperm(abs.(DMD[2][:]), rev = true)
 
 Ω = log.(DMD[2])/μ_m # continuous time DMD eigenvalues
 
-Λ1 = (abs.(DMD[2][order[:]])./(sum(abs.(DMD[2]))))
+m_disc_Λ = abs.(DMD[2][order[:]])
 
-plot_Λ1 = plot(Λ1,
+plot_m_disc_Λ = plot(m_disc_Λ,
                 Layout(
                     title = attr(
                         text = "Discrete DMD / Koopman Eigenvalues",
                     ),
                     title_x = 0.5,
-                    yaxis_title = "|Λ| [%]",
+                    yaxis_title = "|Λ|",
                     ),
                 )
 
-#display(plot_Λ1)
+#display(plot_m_disc_Λ)
 
-Λ2 = scatter(x = (real.(DMD[2][order[:]])),
+RI_disc_Λ = scatter(x = (real.(DMD[2][order[:]])),
             y = (imag.(DMD[2][order[:]])),
             mode="markers",
             marker=attr(color = order,
@@ -353,7 +287,7 @@ plot_Λ1 = plot(Λ1,
             )
 
 
-plot_Λ2 = plot(Λ2,
+plot_RI_disc_Λ = plot(RI_disc_Λ,
                 Layout(
                     title = attr(
                         text = "Discrete DMD / Koopman Eigenvalues",
@@ -364,7 +298,7 @@ plot_Λ2 = plot(Λ2,
                     ),
                 )
 
-#display(plot_Λ2)
+#display(plot_RI_disc_Λ)
 
 Ωo = scatter(x = real.(Ω[order[:]]),
             y = imag.(Ω[order[:]]),
@@ -388,9 +322,10 @@ plot_Ωo = plot(Ωo,
 
 #display(plot_Ωo)
 
-Phi = DMD[1]
+tr = 4
+Phi = φ[:, order[1:tr]]
 
-traces = [(real(Phi[:,order[1:tr]])), (imag(Phi[:,order[1:tr]]))]
+traces = [real(Phi), imag(Phi)]
 
 plot_ϕr = plot(traces[1],
                 Layout(
@@ -414,57 +349,12 @@ plot_ϕi = plot(traces[2],
 
 plot_ϕ = [plot_ϕr; plot_ϕi]
 relayout!(plot_ϕ,
-        title_text = "DMD eigenvectors ≈ Koopman Eigenfunctions",
+        title_text = "Koopman Eigenfunctions",
         title_x = 0.5,)
-#display(plot_ϕ) =#
+#display(plot_ϕ)
 
-# ******************************************************************************************
-# Single Value Decomposition
-
-#= tr = 12
-Σ = (SVDr[2][1:tr]./(sum(SVDr[2])))
-
-plot_Σ = plot(Σ,
-                Layout(
-                    title = attr(
-                        text = "Singular Values",
-                    ),
-                    title_x = 0.5,
-                    yaxis_title = "Σ [%]",
-                    ),
-                )
-
-#display(plot_Σ)
-
-U = real(SVDr[1][:, 2:tr])
-
-plot_U = plot(U,
-                Layout(
-                    title = attr(
-                        text = "Left Singular Vectors", # SVD modes
-                    ),
-                    title_x = 0.5,
-                    yaxis_title = "U",
-                    ),
-                )
-
-#display(plot_U)
-
-V = real(SVDr[3][:, 1:tr])
-
-plot_V = plot(V,
-                Layout(
-                    title = attr(
-                        text = "Right Singular Vectors",
-                    ),
-                    title_x = 0.5,
-                    yaxis_title = "V",
-                    ),
-                )
-
-#display(plot_V) =#
 # ******************************************************************************************
 
 show(to)
 
-println("...........o0o----ooo0§0ooo~~~   END   ~~~ooo0§0ooo----o0o...........\n")
+println("\n...........o0o----ooo0§0ooo~~~   END   ~~~ooo0§0ooo----o0o...........\n")

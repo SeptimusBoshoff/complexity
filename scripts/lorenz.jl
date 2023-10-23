@@ -33,7 +33,7 @@ history = 5 # backward trajectory [seconds]
 future = 5 # forward trajectory [seconds]
 
 # ******************************************************************************************
-
+μ_s = 0.005 # time step size (seconds)
 μ_m = sampling*μ_s # machine time step
 npast = convert(Int, round(history/μ_m)) #Past Series sample size
 nfuture = convert(Int, round(future/μ_m)) #Future series sample size

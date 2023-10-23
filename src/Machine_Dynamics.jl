@@ -242,10 +242,10 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
 
     elseif alg == :GA
 
-        m = length(valid_next)
+        #m = length(valid_next)
 
-        A = (1/(m))*coords[:, valid_next]*transpose(coords[:, valid_prev])
-        G = (1/(m))*coords[:, valid_prev]*transpose(coords[:, valid_prev])
+        A = coords[:, valid_next]*transpose(coords[:, valid_prev])#*(1/(m))
+        G = coords[:, valid_prev]*transpose(coords[:, valid_prev])#*(1/(m))
 
         shift_op = A/G
 
@@ -258,7 +258,7 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
         # Step 4: The DMD modes are eigenvectors of the high-dimensional A matrix. The DMD
         # eigenvalues are also the eigenvalues of the full shift operator.
 
-        Phi= U_map*eigvec_r
+        Phi = U_map*eigvec_r
 
         #= Phi = zeros(Complex, r+1, r+1)
         Phi[1] = 1
@@ -291,7 +291,7 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
     # Now ensure the operator power does not blow up
     # Eigenvalues should have modulus less than 1...
 
-    if maximum(abs.(eigval)) > (1 + 0.001) #&& (alg != :hankel && alg != :dmd)
+    if maximum(abs.(eigval)) > (1 + 1e-5) #&& (alg != :hankel && alg != :dmd)
 
         # ... but there may be numerical innacuracies, or irrelevant
         # component in the eigenbasis decomposition (the smaller eigenvalues
@@ -321,7 +321,7 @@ function shift_operator(coords; index_map = nothing, return_eigendecomp = false,
 
         W = (eigvec_r*Diagonal(eigval))\(Ur') #Koopman eigenfunctions as rows
 
-        DMD = (Phi, eigval, W) # DMD modes, eigenvalues, eigenfunctions
+        DMD = (Phi, eigval, W) # DMD modes, eigenvalues, eigenfunction weights
         SingleValueDecomposition = (U, S, V)
 
         if !residual
@@ -545,6 +545,7 @@ function expectation_operator(coords, index_map, targets; func = present, delay_
             valid_f = (findall(vec(prod(.!isnan.(fvalues), dims = 2))))
 
             eoplist[e_cnt] = transpose(transpose(coords[:,valid_f]) \ (fvalues[valid_f,:]))
+
             #eoplist[e_cnt] = transpose(fvalues[valid_f,:]) * pinv(coords[:,valid_f])
 
             residual[e_cnt] = norm(eoplist[e_cnt]*coords[:,valid_f] .- transpose(fvalues[valid_f,:]))
@@ -563,6 +564,7 @@ function expectation_operator(coords, index_map, targets; func = present, delay_
         end
 
         e_cnt += 1
+
     end
 
     return eoplist, residual
@@ -930,12 +932,6 @@ function predict(npred, coords_ic, expect_op; return_dist = 2, DMD = nothing, sh
     predictions with the expectation operator is still feasible, and we get the expected
     value from the limit distribution as a result.
 
-    If, instead, one wants a trajectory, and not the limit average, then a method is
-    required to ensure that each predicted state remains valid as a result of applying a
-    linear shift operator. The Nearest Neighbours method is an attempt to solve this issue.
-    The preimage issue is a recurrent problem in machine learning and no single answer can
-    currently solve all cases.
-
     """
 
     coord = copy(coords_ic)[:, end] # the sequence leading up to the most recent initial condition
@@ -945,14 +941,15 @@ function predict(npred, coords_ic, expect_op; return_dist = 2, DMD = nothing, sh
     eo_len = length(expect_op)
     eop_dims = length(expect_op[1]) # dimension of the expectation operator
     eop_rank = Int(round.((eop_dims - 1) / (c_dims - 1), digits = 0))
-
-    hankel_rank = Int(round.((size(DMD[1], 1) - 1) / (c_dims - 1), digits = 0))
+    hankel_rank = eop_rank
 
     pred_coords = Array{Float64, 2}(undef, c_dims, npred)
 
     pred = [Vector{Float64}(undef, npred) for _ = 1:eo_len]
 
     if !isnothing(DMD)
+
+        hankel_rank = Int(round.((size(DMD[1], 1) - 1) / (c_dims - 1), digits = 0))
 
         Phi = DMD[1] # projected Koopman left eigenvectors
         Λ = Diagonal(DMD[2]) #discrete time eigenvalues
@@ -975,12 +972,12 @@ function predict(npred, coords_ic, expect_op; return_dist = 2, DMD = nothing, sh
 
             b = (DMD[3])*coord
         end
-    end
 
-    if hankel_rank < eop_rank
+        if hankel_rank < eop_rank
 
-        eop_coord = [1; vec(coords_ic[2:end, 1:eop_rank])]
+            eop_coord = [1; vec(coords_ic[2:end, 1:eop_rank])]
 
+        end
     end
 
     for p in 1:npred
@@ -992,7 +989,7 @@ function predict(npred, coords_ic, expect_op; return_dist = 2, DMD = nothing, sh
 
         else
 
-            coord = real(Phi*(Λm)*b)
+            coord = real(Phi*Λm*b)
             Λm = Λm*Λ
 
         end
@@ -1080,31 +1077,60 @@ Compute the best matching state distributions.
   on the RKHS samples.
 
 """
-function new_coords(Ks, Gs, coords; alg = :nnls)
+function new_coords(Ks, Gs, coords; alg = :nnls, ϵ = 1e-6)
 
-    if alg == :unbounded
+    if alg == :ldiv
 
-        Ω = copy(Ks)
-        ldiv!(bunchkaufman(Gs), Ω) # Gs \ Ks
+        Ω = copy(Ks) # = inv(Gs)*Ks
+        ldiv!(cholesky(Gs + ϵ*I), Ω) # Gs \ Ks
 
     elseif alg == :nnls
 
         # Note that the Non-Negative constraint is enough in this case,
         # Since the solution sums to 1 with the diagonal entries in Gs
+        #Ω = nonneg_lsq(transpose(Gs)*Gs, transpose(Gs)*Ks, alg = :nnls)
         Ω = nonneg_lsq(Gs, Ks, alg = :nnls)
     end
 
     Ω = Ω ./ sum(Ω, dims = 1)
+
     # q0 is specified in the original RKHS representation, for each sample.
     # Turn it into an eigen space representation (scaled if coords are scaled)
-    nc = transpose(Ω) * transpose(coords)
-    # Since q0 is normalized, and since all the first components of the coordinates are 1, the first entry of the state distribution should also be 1
-    if !isapprox(nc[:,1],ones(length(nc[:,1])))
+
+    nc = coords*Ω
+
+    # Since q0 is normalized, and since all the first components of the coordinates are 1,
+    # the first entry of the state distribution should also be 1
+
+    if !isapprox(nc[1,:], ones(length(nc[1,:])))
 
         @warn ("The resulting state distribution must be normalized to have 1 as its first entry, but this is not the case. Did you pass the correct coordinates?")
     end
-    # ensure there are no numerical roundoff
-    nc = nc ./ nc[:,1]
 
-    return transpose(nc)
+    # ensure there are no numerical roundoff
+    nc = nc ./ transpose(nc[1,:])
+
+    return nc
+end
+
+function evolve(npred, Ks, DMD)
+
+    pred = Array{Float64, 2}(undef, 2, npred)
+
+    Phi = DMD[1]
+
+    Λ = Diagonal(DMD[2])
+    Λm = copy(Λ)
+
+    b = DMD[3]*Ks[1:end-1]
+
+    for p in 1:npred
+
+        pred[:, p] = real.(Phi*Λm*b)
+        Λm = Λm*Λ
+
+        # maybe make sure that the first eigenvalue remains equal to 1?
+    end
+
+    return pred
 end

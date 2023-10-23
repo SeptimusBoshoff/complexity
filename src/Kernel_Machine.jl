@@ -752,31 +752,33 @@ using the conditional mean embedding.
 - `(embedder)::Array{Float64, 2}`: A matrix used for embedding new kˣ kernel similarity
 - vectors.
 """
-function embed_states(Gx, Gy; ϵ = 1e-8, normalize = true, return_embedder = false)
+function embed_states(Gx, Gy; ϵ = 1e-10, normalize = true, return_embedder = true, centre_embedder = false)
 
-    centre_embedder = false # under development
+    N = size(Gx, 1)
 
     if !centre_embedder
 
-        #Ω = (Gx + ϵ*I) \ Gx
+        #Ω = (Gx + N*ϵ*I) \ Gx
 
         Ω = copy(Gx) # this is our weight matrix
-        ldiv!(factorize(Gx + ϵ*I), Ω)
+        ldiv!(cholesky(Gx + N*ϵ*I), Ω)
 
     else
 
         #Ω = (H*Gˣ + N*ϵ*I) \ (H*Gx)
 
-        N = size(Gx, 1)
-        H = I - (1/N)*ones(N)*transpose(ones(N)) # centring matrix
+        H = I - (1/N)*ones(N, N)# centring matrix
 
-        Ω = H*copy(Gx) # this is our centred weight matrix? normalised? breaks the symmetry?
-        ldiv!(cholesky(H*Gx + N*ϵ*I), Ω)
+        Ω = H*Gx # this is will become our centred weight matrix
+        Ω = 0.5*(Ω .+ transpose(Ω)) # H*Gx should be positive definite, but numerical instabilities
+        ldiv!(factorize(Ω + N*ϵ*I), Ω)
+
+        # the results between centring and not, appear to be comparable, but without is faster
     end
 
-    Ω = Symmetric(Ω) # should not be needed
+    Ω = 0.5*(Ω .+ transpose(Ω)) # should not be needed
 
-    embedder = transpose(Ω) * Gy
+    embedder = Ω * Gy
 
     Gs = embedder * Ω
 
@@ -1009,7 +1011,7 @@ function embed_Kx(Kx, Gx, embedder, ϵ = 1e-8; alg = :ldiv)
         Kx: a similarity vector in X space, such as returned by series_newKx.
         Gx: a similarity matrix of pasts X.
         embedder: The embedder returned by embed_states
-        eps: amount of regularization. See embed_states
+        ϵ: amount of regularization. See embed_states
 
     Returns:
         Ks: the similarity vector, in state space
@@ -1017,7 +1019,7 @@ function embed_Kx(Kx, Gx, embedder, ϵ = 1e-8; alg = :ldiv)
 
     if alg == :nnls # this is more accurate
 
-        omega = nonneg_lsq(Gx + ϵ*I, Kx, alg = :nnls)
+        omega = nonneg_lsq(Gx + ϵ*I, Kx, alg = :nnls) # is this actually
 
         Ks = (embedder * omega)
 
@@ -1027,7 +1029,7 @@ function embed_Kx(Kx, Gx, embedder, ϵ = 1e-8; alg = :ldiv)
         Ks = embedder * Ω =#
 
         Ω = copy(Kx) # this is our weight matrix
-        ldiv!(factorize(Gx + ϵ*I), Ω)
+        ldiv!(cholesky(Gx + ϵ*I), Ω) # Todo: isn't there an N missing?
         Ks = embedder * Ω
 
     end
@@ -1035,35 +1037,142 @@ function embed_Kx(Kx, Gx, embedder, ϵ = 1e-8; alg = :ldiv)
     return Ks
 end
 
-function Gaussian_kernel(x₁, x₂, scale; dims = -1)
+function Gaussian_kernel(x₁, x₂, η; dims = -1)
 
     if dims == -1
 
-        k_x₁_x₂ = exp(-1*sum(abs2, x₁ - x₂)/((2*scale^2)))
+        k_x₁_x₂ = exp(-η*sum(Base.abs2, x₁ - x₂))
 
         return k_x₁_x₂
     else
 
-        k_x₁_x₂ = exp(-1*sum(abs2, x₁ - x₂)/((2*scale^2)))
+        k_x₁_x₂ = exp(-η*sum(Base.abs2, x₁ - x₂))
 
         return k_x₁_x₂*Matrix(I, dims, dims)
     end
 end
 
-function Compatible_kernel(z₁, z₂, scale; kernel = Gaussian_kernel, Σinv = nothing)
+function Distance_kernel(x₁, x₂, s)
+
+    return s*sum(abs2, x₁ - x₂)
+
+end
+
+function exp_mat(D, η; derivative = false)
+
+    N = size(D, 1)
+
+    if N % 2 == 1
+        M = N
+    else
+        M = N - 1
+    end
+
+    G = Array{Float64,2}(undef, N, N)
+    if derivative
+        ∂G = Array{Float64,2}(undef, N, N)
+    end
+
+    # outer loops can be parallelized - all have about the same duration
+
+    if derivative
+
+        Threads.@threads for k in (N+1)÷2:N-1
+
+            for l in 0:k-1
+
+                i = k + 1
+                j = l + 1
+
+                e = exp(-η*D[i, j])
+
+                G[i, j] = e
+                G[j, i] = e
+
+                ∂G[i, j] = -D[i, j]*e
+                ∂G[j, i] = -D[j, i]*e
+
+            end
+
+            for l in k:M-1
+
+                i = M - k + 1
+                j = M - l
+
+                e = exp(-η*D[i, j])
+
+                G[i, j] = e
+                G[j, i] = e
+
+                ∂G[i, j] = -D[i, j]*e
+                ∂G[j, i] = -D[j, i]*e
+            end
+        end
+
+        Threads.@threads for d in 1:N
+
+            G[d, d] = exp(-η*D[d, d])
+            ∂G[d, d] = -D[d, d]*G[d, d]
+        end
+
+        return G, ∂G
+
+    else
+
+        Threads.@threads for k in (N+1)÷2:N-1
+
+            for l in 0:k-1
+
+                i = k + 1
+                j = l + 1
+
+                e = exp(-η*D[i, j])
+
+                G[i, j] = e
+                G[j, i] = e
+
+            end
+
+            for l in k:M-1
+
+                i = M - k + 1
+                j = M - l
+
+                e = exp(-η*D[i, j])
+
+                G[i, j] = e
+                G[j, i] = e
+            end
+        end
+
+        Threads.@threads for d in 1:N
+
+            G[d, d] = exp(-η*D[d, d])
+        end
+
+        return G
+    end
+
+end
+
+function Compatible_kernel(z₁, z₂, η; kernel = Gaussian_kernel, Σinv = nothing)
 
     dims = length(z₁[2])
 
-    k_z₁_z₂ = transpose(transpose(kernel(z₁[1], z₂[1], scale, dims = dims))*Σinv*(z₁[2] - z₁[3]))*(Σinv*(z₂[2] - z₂[3]))
+    k_z₁_z₂ = transpose(kernel(z₁[1], z₂[1], η, dims = dims)*Σinv*(z₁[2] - z₁[3]))*(Σinv*(z₂[2] - z₂[3]))
 
     #k_z₁_z₂ = transpose(transpose(kernel(x₁, x₂, ζ, dims = dims))*Σinv*(a₁ - μ₁))*(Σinv*(a₂ - μ₂))
 
     return k_z₁_z₂
 end
 
-function Gramian(data, scale; kernel = Gaussian_kernel, Σinv = nothing)
+function Gramian(data, η = 1; kernel = Gaussian_kernel, Σinv = nothing, derivative = false)
 
     if !isa(data, Tuple)
+
+        if isa(data, Vector)
+            data = transpose(data)
+        end
 
         n = size(data, 2)
     else
@@ -1072,6 +1181,9 @@ function Gramian(data, scale; kernel = Gaussian_kernel, Σinv = nothing)
     end
 
     G = Array{Float64,2}(undef, n, n)
+    if derivative
+        ∂G = Array{Float64,2}(undef, n, n)
+    end
 
     # Triangular indexing, folded
     # x
@@ -1085,83 +1197,127 @@ function Gramian(data, scale; kernel = Gaussian_kernel, Σinv = nothing)
         m = n - 1
     end
     #Threads.@threads
-    Threads.@threads for k in (n+1)÷2:n-1
 
-        for l in 0:k-1
+    if derivative
 
-            i = k + 1
-            j = l + 1
+        Threads.@threads for k in (n+1)÷2:n-1
+
+            for l in 0:k-1
+
+                i = k + 1
+                j = l + 1
+
+                G[i, j] = kernel(data[:,i], data[:,j], η)
+                ∂G[i, j] = -G[i, j]*sum(abs2, data[:,i] - data[:,j])
+
+                G[j, i] = G[i, j]
+                ∂G[j, i] = ∂G[i, j]
+
+            end
+
+            for l in k:m-1
+
+                i = m - k + 1
+                j = m - l
+
+                G[i, j] = kernel(data[:,i], data[:,j], η)
+                ∂G[i, j] = -G[i, j]*sum(abs2, data[:,i] - data[:,j])
+
+                G[j, i] = G[i, j]
+                ∂G[j, i] = ∂G[i, j]
+
+            end
+
+        end
+
+        Threads.@threads for i in 1:n
+
+            G[i, i] = kernel(data[:,i], data[:,i], η)
+            ∂G[i, i] = 0
+
+        end
+
+        return G, ∂G
+
+    else
+
+        Threads.@threads for k in (n+1)÷2:n-1
+
+            for l in 0:k-1
+
+                i = k + 1
+                j = l + 1
+
+                if kernel == Compatible_kernel
+
+                    z₁ = (data[1][:,i], data[2][:,i], data[3][:,i])
+                    z₂ = (data[1][:,j], data[2][:,j], data[3][:,j])
+
+                    G[i, j] = kernel(z₁, z₂, η; kernel = Gaussian_kernel, Σinv = Σinv)
+
+                else
+
+                    G[i, j] = kernel(data[:,i], data[:,j], η)
+
+                end
+
+                #if (i == 1) && (j == 1)
+
+                G[j, i] = G[i, j]
+
+            end
+
+            for l in k:m-1
+
+                i = m - k + 1
+                j = m - l
+
+                if kernel == Compatible_kernel
+
+                    z₁ = (data[1][:,i], data[2][:,i], data[3][:,i])
+                    z₂ = (data[1][:,j], data[2][:,j], data[3][:,j])
+
+                    G[i, j] = kernel(z₁, z₂, η; kernel = Gaussian_kernel, Σinv = Σinv)
+
+                else
+                    G[i, j] = kernel(data[:,i], data[:,j], η)
+                end
+
+                G[j, i] = G[i, j]
+
+            end
+
+        end
+
+        Threads.@threads for i in 1:n
 
             if kernel == Compatible_kernel
 
                 z₁ = (data[1][:,i], data[2][:,i], data[3][:,i])
-                z₂ = (data[1][:,j], data[2][:,j], data[3][:,j])
 
-                G[i, j] = kernel(z₁, z₂, scale; kernel = Gaussian_kernel, Σinv = Σinv)
-
-            else
-
-                G[i, j] = kernel(data[:,i], data[:,j], scale)
-            end
-
-            #if (i == 1) && (j == 1)
-
-            G[j, i] = G[i, j]
-
-        end
-
-        for l in k:m-1
-
-            i = m - k + 1
-            j = m - l
-
-            if kernel == Compatible_kernel
-
-                z₁ = (data[1][:,i], data[2][:,i], data[3][:,i])
-                z₂ = (data[1][:,j], data[2][:,j], data[3][:,j])
-
-                G[i, j] = kernel(z₁, z₂, scale; kernel = Gaussian_kernel, Σinv = Σinv)
+                G[i, i] = kernel(z₁, z₁, η; kernel = Gaussian_kernel, Σinv = Σinv)
 
             else
-                G[i, j] = kernel(data[:,i], data[:,j], scale)
+                G[i, i] = kernel(data[:,i], data[:,i], η)
             end
 
-            G[j, i] = G[i, j]
-
         end
 
+        return G
     end
-
-    Threads.@threads for i in 1:n
-
-        if kernel == Compatible_kernel
-
-            z₁ = (data[1][:,i], data[2][:,i], data[3][:,i])
-
-            G[i, i] = kernel(z₁, z₁, scale; kernel = Gaussian_kernel, Σinv = Σinv)
-
-        else
-            G[i, i] = kernel(data[:,i], data[:,i], scale)
-        end
-
-    end
-
-    #G = G .+ Matrix(I,n,n)
-
-    return G
 end
 
-function KLSTD(data, C, rewards, scale, γ, j; kernel = Gaussian_kernel, ϵ = 1e-6, Σinv = nothing)
+function KLSTD(data, data_ids, C, rewards, η, γ; kernel = Gaussian_kernel, ϵ = 1e-6, Σinv = nothing)
 
     if kernel == Gaussian_kernel
 
         D = size(C, 2)
-        T = size(data, 2)
     else
 
         D = size(C[1], 2)
-        T = size(data[1], 2)
     end
+
+    N = length(data_ids)
 
     ϑₖ = Array{Float64,1}(undef, D) # current feature vector
     ϑₙ  = Array{Float64,1}(undef, D) # next feature vector
@@ -1169,49 +1325,46 @@ function KLSTD(data, C, rewards, scale, γ, j; kernel = Gaussian_kernel, ϵ = 1e
     A = zeros(D, D)
     b = zeros(D)
 
-    for k in 1:T-1
+    for k in 1:N
 
-        if k%(T/j) != 0
+        for d in 1:D
 
-            for d in 1:D
+            if kernel == Gaussian_kernel
 
-                if kernel == Gaussian_kernel
+                ϑₖ[d] = kernel(C[:,d], data[:, data_ids[k]], η)
+                ϑₙ[d] = kernel(C[:,d], data[:, data_ids[k] + 1], η)
 
-                    ϑₖ[d] = kernel(C[:,d], data[:, k], scale)
-                    ϑₙ[d] = kernel(C[:,d], data[:, k + 1], scale)
+            else
 
-                else
+                ϑₖ[d] = kernel((C[1][:,d], C[2][:,d], C[3][:,d]),
+                                (data[1][:, data_ids[k]], data[2][:, data_ids[k]], data[3][:, data_ids[k]]),
+                                η, Σinv = Σinv)
+                ϑₙ[d] = kernel((C[1][:,d], C[2][:,d], C[3][:,d]),
+                                (data[1][:, data_ids[k] + 1], data[2][:, data_ids[k] + 1], data[3][:, data_ids[k] + 1]),
+                                η, Σinv = Σinv)
 
-                    ϑₖ[d] = kernel((C[1][:,d], C[2][:,d], C[3][:,d]),
-                                    (data[1][:, k], data[2][:, k], data[3][:, k]),
-                                    scale, Σinv = Σinv)
-                    ϑₙ[d] = kernel((C[1][:,d], C[2][:,d], C[3][:,d]),
-                                    (data[1][:, k + 1], data[2][:, k + 1], data[3][:, k + 1]),
-                                    scale, Σinv = Σinv)
-
-                end
             end
-
-            A += ϑₖ*transpose(ϑₖ - γ*ϑₙ)
-            b += ϑₖ*rewards[k]
         end
 
+        A += ϑₖ*transpose(ϑₖ - γ*ϑₙ)
+        b += ϑₖ*rewards[data_ids[k]]
+
     end
 
-    if T > 1
-        α = (A + ϵ*I) \ b # inv(A)*b
+    if N > 1
+        Λ = (A + ϵ*I) \ b
     else
-        α = b
+        Λ = b
     end
 
-    return transpose(α)
+    return transpose(Λ)
 end
 
-function function_approximation(x, Λ, C, scale; kernel = Gaussian_kernel, Σinv = nothing)
+function function_approximation(x, Λ, C, η; kernel = Gaussian_kernel, Σinv = nothing, β = zeros(size(Λ,1)))
 
     if kernel == Gaussian_kernel
 
-        if isa(Λ, Vector)
+        #= if isa(Λ, Vector)
 
             N = length(Λ)
             ϑ = Array{Float64,1}(undef, N) # feature vector
@@ -1220,13 +1373,13 @@ function function_approximation(x, Λ, C, scale; kernel = Gaussian_kernel, Σinv
             for n in 1:N
 
                 if isa(x, Vector)
-                    ϑ[n] = kernel(C[:,n], x, scale)
+                    ϑ[n] = kernel(C[:,n], x, η)
                 else
-                    ϑ[n] = kernel(C[:,n], [x], scale)
+                    ϑ[n] = kernel(C[:,n], [x], η)
                 end
             end
 
-            f_x = (transpose(Λ)*ϑ)[1]
+            f_x = (transpose(Λ)*ϑ)[1] .+ β
 
         else
 
@@ -1237,15 +1390,38 @@ function function_approximation(x, Λ, C, scale; kernel = Gaussian_kernel, Σinv
             for n in 1:N
 
                 if isa(x, Vector)
-                    ϑ[n] = kernel(C[:,n], x, scale)
+                    ϑ[n] = kernel(C[:,n], x, η)
                 else
-                    ϑ[n] = kernel(C[:,n], [x], scale)
+                    ϑ[n] = kernel(C[:,n], [x], η)
                 end
 
             end
 
-            f_x = Λ*ϑ
+            f_x = Λ*ϑ .+ β
+        end =#
+
+        N = size(Λ, 2)
+        ϑ = Array{Float64,1}(undef, N) # feature vector
+        f_x = zeros(size(Λ, 1))
+
+        if isa(x, Vector)
+
+            for n in 1:N
+
+                ϑ[n] = kernel(C[:,n], x, η)
+
+            end
+
+        else
+
+            for n in 1:N
+
+                ϑ[n] = kernel(C[:,n], [x], η)
+
+            end
         end
+
+        f_x = Λ*ϑ .+ β
 
     else
 
@@ -1257,11 +1433,11 @@ function function_approximation(x, Λ, C, scale; kernel = Gaussian_kernel, Σinv
 
             z₁ = (C[1][:,n], C[2][:,n], C[3][:,n])
 
-            ϑ[n] = kernel(z₁, x, scale; kernel = Gaussian_kernel, Σinv = Σinv)
+            ϑ[n] = kernel(z₁, x, η; kernel = Gaussian_kernel, Σinv = Σinv)
 
         end
 
-        f_x = Λ*ϑ
+        f_x = Λ*ϑ .+ β
     end
 
     if size(Λ, 1) == 1
@@ -1272,73 +1448,73 @@ function function_approximation(x, Λ, C, scale; kernel = Gaussian_kernel, Σinv
 
 end
 
-function SGA(data, scale, Σinv, η, critic_Λ, critic_C)
+function SGA(data, data_ids, T, Z, actor_η, Σinv, critic_Λ, critic_C, critic_η)
 
-    G  = Gramian(data[1], scale; kernel = Gaussian_kernel)
-    #∇J = G*transpose(Q.*(Σinv*(data[2] .- data[3])))
-    #f_μ = data[3] .+ η*transpose(G*transpose(Q.*(Σinv*(data[2] .- data[3]))))
+    M = size(data[1], 2)
 
-    T = size(data[1], 2)
+    N = length(data_ids)
 
-    ∇J = zeros(T)
+    ∇J = zeros(N)
     Q = Array{Float64,1}(undef, T)
 
-    for k in 1:T
+    for z in 1:Z
 
-        Q[k] = function_approximation((data[1][:,k], data[2][:,k], data[3][:,k]),
-                                    critic_Λ, critic_C, scale,
-                                    kernel = Compatible_kernel, Σinv = Σinv)
+        ids_t = collect(M -z*T + 1: M - (z-1)*T)
 
-        #= Q[k] = function_approximation(vcat(data[1][:,k], data[2][:,k]),
-                                    critic_Λ, critic_C, scale) =#
+        for k in 1:T
 
-        for j in 1:T
+            Q[k] = function_approximation((data[1][:, ids_t[k]], data[2][:, ids_t[k]], data[3][:, ids_t[k]]),
+                                        critic_Λ, critic_C, critic_η,
+                                        kernel = Compatible_kernel, Σinv = Σinv)
 
-            #= println("Σinv = ")
-            display(Σinv)
-            println("\ndata[2][:,k] - data[3][:,k] = ")
-            display(data[2][:,k] - data[3][:,k]) =#
+            #= Q[k] = function_approximation(vcat(data[1][:, ids_t[k]], data[2][:, ids_t[k]]),
+                                        critic_Λ, critic_C, critic_η) =#
 
-            ∇J[k] += (Q[k]*Gaussian_kernel(data[1][:,k], data[1][:,j], scale)*Σinv*(data[2][:,k] - data[3][:,k]))[1]
+        end
 
+        for n in 1:N
+            for k in 1:T
+
+                aₖ = data[2][:, ids_t[k]]
+                fₖ = data[3][:, ids_t[k]]
+                ∇J[n] += (Q[k]*Gaussian_kernel(data[1][:, data_ids[n]], data[1][:, ids_t[k]], actor_η)*Σinv*(aₖ - fₖ))[1]
+
+            end
         end
     end
 
-    f_μ = data[3] .+ η*transpose(∇J)
-
-    #f2 = data[3] .+ η*transpose(G*(transpose(Q).*(Σinv*(data[2] .- data[3]))))
-
-    # ∇J = G*transpose(Q.*(Σinv*(data[2] .- data[3])))
-
-    return f_μ#, (G*transpose(transpose(Q).*(Σinv*(data[2] .- data[3])))), ∇J
+    return transpose(∇J).*1/Z#, G
 end
 
-function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ = 1e-6, Σinv = nothing)
+function OMP(data, η, Y, δ = 0.1; kernel = Gaussian_kernel, N = nothing, ϵ = 1e-6, Σinv = nothing, PRESS = false, sparsity = 1.0)
 
-    if size(Y,2) == 1
-        Y = transpose(Y)
-    end
     if isa(data, Vector)
         data = transpose(data)
     end
 
+    if size(Y,2) == 1
+        Y = transpose(Y)
+    end
+
     if kernel == Gaussian_kernel
 
-        U = Gramian(data, scale; kernel = kernel)
-        G = copy(U)
+        G = Gramian(data, η; kernel = kernel)
+        G += ϵ*I
+        U = copy(G)
 
         d = size(data,1)
 
     elseif kernel == Compatible_kernel
 
-        U = Gramian(data, scale; kernel = kernel, Σinv = Σinv)
-        G = copy(U)
+        G = Gramian(data, η; kernel = kernel, Σinv = Σinv) + ϵ*I
+        U = copy(G)
 
-        d = size(data[1],1)
+        d = size(data[1], 1)
     end
 
     T = size(U,1)
     m = size(Y,1)
+    sparsity = clamp(sparsity, 0.0, 1.0)
 
     for i in 1:T
 
@@ -1346,41 +1522,54 @@ function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ
 
     end
 
-    error_ic = norm(Y)
+    error_ic = sqrt(sum(sum(abs2, Y, dims = 1))/T) #sqrt(norm(Y)/m)
 
     if error_ic == 0 error_ic = 1e-6 end
 
     if isnothing(N)
 
         Φ = Array{Float64,2}(undef, T, 1)
-        C = Array{Float64,2}(undef, d, 1)
         ids = Array{Int64,1}(undef, 1)
+        ids_vec = ones(T)
+        β = zeros(m)
 
-        n = 1
+        if isa(data,Tuple)
+
+            C = (Array{Float64,2}(undef, d, 1),
+                Array{Float64,2}(undef, m, 1),
+                Array{Float64,2}(undef, m, 1))
+        else
+
+            C = Array{Float64,2}(undef, d, 1)
+        end
+
+        N = 0
 
         error = 100
 
         while error > δ
 
-            if n > 1
+            N += 1
+
+            if N > 1
 
                 vector = diag(transpose(U)*transpose(R)*(R*(U)))
 
-                index = argmax(vector .* (1 .- [i in ids[1:n-1] for i in eachindex(vector)]))
+                index = argmax(vector .* ids_vec)
 
                 ids = vcat(ids, index)
-                Φ = hcat(Φ, G[:,ids[n]])
+                ids_vec[index] = 0
+                Φ = hcat(Φ, G[:,ids[N]])
 
                 if isa(data, Tuple)
 
-                    C = hcat(C, copy(data[1][:,ids[n]]))
+                    C[1] = hcat(C, copy(data[1][:,ids[N]]))
+                    C[2] = hcat(C, copy(data[2][:,ids[N]]))
+                    C[3] = hcat(C, copy(data[3][:,ids[N]]))
                 else
 
-                    C = hcat(C, copy(data[:,ids[n]]))
+                    C = hcat(C, copy(data[:,ids[N]]))
                 end
-
-                #Λ[:,1:n] = Y*pinv(transpose(Φ[:,1:n]))
-                Λ = Y*inv(Φ*transpose(Φ) + ϵ*I)*Φ
 
             else
 
@@ -1389,56 +1578,91 @@ function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ
                 index = argmax(diag(transpose(U)*transpose(R)*(R*(U))))
 
                 ids[1] = index
+                ids_vec[index] = 0
                 Φ[:,1] = G[:,ids[1]]
 
                 if isa(data,Tuple)
 
-                    C[:,1] = copy(data[1][:,ids[1]])
+                    C[1][:,1] = copy(data[1][:,ids[1]])
+                    C[2][:,1] = copy(data[2][:,ids[1]])
+                    C[3][:,1] = copy(data[3][:,ids[1]])
                 else
 
                     C[:,1] = copy(data[:,ids[1]])
                 end
 
-                #Λ[:,1:n] = Y*pinv(transpose(Φ[:,1:n]))
-                Λ = Y*inv(Φ*transpose(Φ) + ϵ*I)*Φ
             end
 
-            R = Y - Λ*transpose(Φ)
+            if rand() < sparsity || N == 1
 
-            error = 100*norm(R)/error_ic
+                #Λ[:,1:N] = Y*pinv(transpose(Φ[:,1:N]))
+                #Λ = Y*inv(Φ*transpose(Φ) + ϵ*I)*Φ
+                #Λ = transpose(Φ \ transpose(Y))
+                D = vcat(hcat(Φ, ones(T)), hcat(ones(1,N), 0))
+                Λ_β = transpose(D \ transpose(hcat(Y, zeros(m))))
+                Λ = Λ_β[:,1:end-1]
+                β = Λ_β[:,end]
 
-            if n == T
-                break;
             else
-                n += 1
+
+                Λ = hcat(Λ, R*U[:,ids[N]])
+
+            end
+
+            Yh = Λ*transpose(Φ) + β*ones(1,T)
+            R = Y - Yh
+
+            error = sqrt(sum(sum(abs2, R, dims = 1))/T) #100*norm(R)/error_ic
+
+            if N+1 == T
+                break;
             end
         end
 
-    else
+        if sparsity != 1
+
+            D = vcat(hcat(Φ, ones(T)), hcat(ones(1,N), 0))
+            Λ_β = transpose(D \ transpose(hcat(Y, zeros(m))))
+            Λ = Λ_β[:,1:end-1]
+            β = Λ_β[:,end]
+
+            Yh = Λ*transpose(Φ) + β*ones(1,T)
+            R = Y - Yh
+
+            # using root mean square error
+            error = sqrt(sum(sum(abs2, R, dims = 1))/T) #100*norm(R)/error_ic
+        end
+
+    elseif N < T
 
         N = clamp(N, 1, T)
 
         Φ = Array{Float64,2}(undef, T, N)
 
         if isa(data,Tuple)
-            C = (Array{Float64,2}(undef, d, N), Array{Float64,2}(undef, m, N), Array{Float64,2}(undef, m, N))
+
+            C = (Array{Float64,2}(undef, d, N),
+                Array{Float64,2}(undef, m, N),
+                Array{Float64,2}(undef, m, N))
         else
+
             C = Array{Float64,2}(undef, d, N)
         end
 
         ids = Array{Int64,1}(undef, N)
+        ids_vec = ones(T)
         Λ = Array{Float64,2}(undef, m, N)
+        β = zeros(m)
 
         for n in 1:N
 
             if n > 1
 
-                R = Y - Λ[:,1:n-1]*transpose(Φ[:,1:n-1])
+                R = Y - Λ[:,1:n-1]*transpose(Φ[:,1:n-1]) - β*ones(1,T)
 
-                #vector = diag(transpose(R*transpose(U))*(R*transpose(U)))
                 vector = diag(transpose(U)*transpose(R)*(R*(U)))
 
-                index = argmax(vector .* (1 .- [i in ids[1:n-1] for i in 1:length(vector)]))
+                index = argmax(vector .* ids_vec)
 
             else
 
@@ -1447,6 +1671,7 @@ function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ
                 index = argmax(diag(transpose(U)*transpose(R)*(R*(U))))
             end
 
+            ids_vec[index] = 0
             ids[n] = index
             Φ[:,n] = G[:,ids[n]]
 
@@ -1460,53 +1685,136 @@ function OMP(data, scale, Y, δ = 0.5; kernel = Gaussian_kernel, N = nothing, ϵ
                 C[:,n] = copy(data[:,ids[n]])
             end
 
-            #Λ[:,1:n] = Y*pinv(transpose(Φ[:,1:n]))
-            Λ[:,1:n] = Y*inv(Φ[:,1:n]*transpose(Φ[:,1:n]) + ϵ*I)*Φ[:,1:n]
+            if rand() < sparsity || n == N
+
+                #Λ[:,1:n] = Y*pinv(transpose(Φ[:,1:n]))
+                #Λ[:,1:n] = Y*inv(Φ[:,1:n]*transpose(Φ[:,1:n]) + ϵ*I)*Φ[:,1:n]
+                #Λ[:,1:n] = transpose(Φ[:,1:n] \ transpose(Y))
+
+                D = vcat(hcat(Φ[:,1:n], ones(T)), hcat(ones(1,n), 0))
+                Λ_β = transpose(D \ transpose(hcat(Y, zeros(m))))
+                Λ[:,1:n] = Λ_β[:,1:end-1]
+                β = Λ_β[:,end]
+
+            else
+
+                α = R*U[:,ids[n]]
+                if typeof(α) != Vector{Float64}
+                    Λ[:,n] = [α]
+                else
+                    Λ[:,n] = α
+                end
+
+            end
 
         end
 
-        R = Y - Λ*transpose(Φ)
+        Yh = Λ*transpose(Φ) + β*ones(1,T)
+        R = Y - Yh
+        error = sqrt(sum(sum(abs2, R, dims = 1))/T) #100*norm(R)/error_ic
 
-        error = 100*norm(R)/error_ic
+    elseif N >= T
+
+        C = copy(data)
+
+        N = T
+
+        Λ, β, Ch, ρ = kernel_regression(G, Y; N = N)
+
+        Φ = G
+        Yh = Λ*transpose(Φ) + β*ones(1,T)
+        R = Y - Yh
+        error = sqrt(sum(sum(abs2, R, dims = 1))/T) #100*norm(R)/error_ic
+
     end
 
-    #f = Λ*transpose(Φ)
+    if PRESS
 
-    return Λ, C, error
+        if Φ == G
+
+            S = inv(Ch.L)
+            Sm = -1*transpose(S*ones(N))*S*ones(N)
+
+            Dinv = Array{Float64,1}(undef, N) #diag(transpose(S)*S) .+ ρ.^2/Sm
+            for i in 1:N
+                Dinv[i] = transpose(S[:,i])*S[:,i] + ρ[i]^2/Sm
+            end
+
+            Press = 0.5*(sum(abs2, transpose(Λ)./(Dinv), dims = 1)) # predictive residual sum of squares
+
+        else
+
+            #H = transpose(Φ*inv(transpose(Φ)*Φ)*transpose(Φ)) # influence matrix
+            #h = 1 .- diag(H)
+            h = 1 .- diag(transpose(Φ*inv(transpose(Φ)*Φ)*transpose(Φ))) # where is β term? wrong equation
+            Press = 0.5*sum(abs2, transpose(R)./h, dims = 1)
+
+        end
+
+        if m > 1
+            Press = vec(Press)
+        else
+            Press = Press[1]
+        end
+
+        return Λ, C, β, error, Press
+
+    else
+
+        return Λ, C, β, error
+
+    end
+
 end
 
-function ALD(data, μ, scale; kernel = Gaussian_kernel, ϵ = 1e-6, Σinv = nothing)
+function Press(Ch, Λ, ρ, N = size(Ch,2))
+
+    S = inv(Ch.L)
+    Sm = -1*transpose(S*ones(N))*S*ones(N)
+
+    Dinv = Array{Float64,1}(undef, N) #diag(transpose(S)*S) .+ ρ.^2/Sm
+    for i in 1:N
+        Dinv[i] = transpose(S[:,i])*S[:,i] + ρ[i]^2/Sm
+    end
+
+    P = 0.5*(sum(abs2, transpose(Λ)./(Dinv), dims = 1)) # predictive residual sum of squares
+
+    return P[1]
+end
+
+function ALD(data, data_ids, μ, η; kernel = Gaussian_kernel, ϵ = 1e-6, Σinv = nothing)
 
     if kernel == Gaussian_kernel
 
-        G = Gramian(data, scale; kernel = kernel)
+        G = Gramian(data[:, data_ids], η; kernel = kernel)
 
         C = Array{Float64,2}(undef, size(data, 1), 1)
-        C[:,1] = data[:, 1]
+        C[:,1] = data[:, data_ids[1]]
 
         ids = Array{Int64,1}(undef, 1)
         ids[1] = 1
 
     else
 
-        G = Gramian(data, scale; kernel = kernel, Σinv = Σinv)
+        G = Gramian((data[1][:, data_ids], data[2][:, data_ids], data[3][:, data_ids]), η;
+        kernel = kernel, Σinv = Σinv)
 
         C_state = Array{Float64,2}(undef, size(data[1], 1), 1)
         C_action = Array{Float64,2}(undef, size(data[2], 1), 1)
         C_mean = Array{Float64,2}(undef, size(data[3], 1), 1)
 
-        C_state[:, 1] = data[1][:, 1]
-        C_action[:, 1] = data[2][:, 1]
-        C_mean[:, 1] = data[3][:, 1]
+        C_state[:, 1] = data[1][:, data_ids[1]]
+        C_action[:, 1] = data[2][:, data_ids[1]]
+        C_mean[:, 1] = data[3][:, data_ids[1]]
 
         ids = Array{Int64,1}(undef, 1)
         ids[1] = 1
 
     end
 
-    T = size(G, 1)
+    N = length(data_ids)
 
-    for k in 2:T
+    for k in 2:N
 
         cₖ = (G[ids, ids] + ϵ*I) \ G[ids, k] #inv(G[ids,ids])*G[ids,k]
         δₖ = G[k, k] - transpose(G[ids, k])*cₖ
@@ -1515,14 +1823,14 @@ function ALD(data, μ, scale; kernel = Gaussian_kernel, ϵ = 1e-6, Σinv = nothi
 
             if kernel == Gaussian_kernel
 
-                C = hcat(C, data[:,k])
+                C = hcat(C, data[:, data_ids[k]])
                 ids = vcat(ids, k)
 
             else
 
-                C_state = hcat(C_state, data[1][:, k])
-                C_action = hcat(C_action, data[2][:, k])
-                C_mean = hcat(C_mean, data[3][:, k])
+                C_state = hcat(C_state, data[1][:, data_ids[k]])
+                C_action = hcat(C_action, data[2][:, data_ids[k]])
+                C_mean = hcat(C_mean, data[3][:, data_ids[k]])
 
                 ids = vcat(ids, k)
             end
@@ -1531,8 +1839,1270 @@ function ALD(data, μ, scale; kernel = Gaussian_kernel, ϵ = 1e-6, Σinv = nothi
 
     if kernel == Gaussian_kernel
 
-        return C, 100*length(ids)/T, G[ids,ids]
+        return C, 100*length(ids)/N, G[ids,:], ids
     else
-        return (C_state, C_action, C_mean), 100*length(ids)/T, G[ids, ids]
+        return (C_state, C_action, C_mean), 100*length(ids)/N, G[ids, ids], ids
+    end
+end
+
+function kernel_regression(G, Y, ϵ = 0; N = size(G,2))
+
+    if ϵ != 0
+        G += ϵ*I
+    end
+
+    if size(Y,2) == 1
+        Y = transpose(Y)
+    end
+
+    m = size(Y,1)
+
+    ρ = ones(N)
+    if m > 1
+        v = Matrix(transpose(copy(Y)))
+    else
+        v = vec(copy(transpose(Y)))
+    end
+
+    Ch = cholesky(G)
+    ldiv!(Ch, ρ)
+    ldiv!(Ch, v)
+
+    if m > 1
+        β = (ones(1,N)*v)./(ones(1,N)*ρ)
+        Λ = transpose(v - ρ*β)
+        β = transpose(β)
+    else
+        β = (ones(1,N)*v)/(ones(1,N)*ρ)
+        Λ = transpose(v - ρ*β)
+    end
+
+    return Λ, β, Ch, ρ
+end
+
+function Weights_and_Gradients(Y, D, ϵ, η)
+
+    G, ∂G = exp_mat(D, η; derivative = true)
+    N = size(G,1)
+
+    #G = 0.5*(G .+ transpose(G))
+    #∂G = 0.5*(∂G .+ transpose(∂G))
+
+    Λ, β, Ch = kernel_regression(G, Y, ϵ; N = N)
+
+    #---------------------------------------------------------------------------------------
+    # gradient calculation
+
+    ∇P = zeros(2) # error gradient
+
+    S = inv(Ch.L)
+    N = size(S,1)
+    invG = transpose(S)*S
+    invSm = -1/(transpose(ones(N))*invG*ones(N))
+
+    #D = vcat(hcat(G, ones(N)), hcat(ones(1,N), 0))
+
+    Dinv = vcat(hcat(invG + invG*ones(N)*invSm*ones(1,N)*invG, -invG*ones(N)*invSm), hcat(-invSm*ones(1,N)*invG, invSm))
+
+    ∂D_∂η = vcat(hcat(∂G, zeros(N)), zeros(1, N+1))
+
+    ∂Λ_∂ϵ = (-Dinv*transpose(hcat(Λ, β)))[1:end-1]
+    ∂Λ_∂η = (-Dinv*∂D_∂η*transpose(hcat(Λ, β)))[1:end-1]
+
+    dii = 1 ./ (diag(Dinv)[1:end-1])
+
+    ri = vec(Λ) .* dii
+    t2ϵ = (∂Λ_∂ϵ .* dii)
+    t2η = (∂Λ_∂η .* dii)
+    t3 = ri .* dii
+    t4ϵ = diag(-Dinv[1:end-1,1:end-1]*Dinv[1:end-1,1:end-1])
+    t4η = diag((-Dinv*∂D_∂η*Dinv)[1:end-1,1:end-1])
+
+    ∇P[1] = sum(ri.*(t2ϵ .- (t3.*t4ϵ)))*ϵ*log(2)
+    ∇P[2] = sum(ri.*(t2η .- (t3.*t4η)))*η*log(2)
+    # now for the error
+
+    P = 0.5*(sum(abs2, ri, dims = 1)) # predictive residual sum of squares
+
+    return ∇P, P[1], Λ, β
+end
+
+function CGD(data, Y; ϵ = 1e-6, η = 10.0, ps = 0.05, Smax = nothing, ε = 10e-3, λ = 1, τ = 0.01, λmax = 1e12, λmin = 0, nmax = 100, D = nothing, ϵ_max = 1e-3, η_max = 100)
+
+    # ps = 0.1 or ps = 0.05
+    # τ around 1.0 is good
+    # A Marquardt Algorithm for Choosing the Step-size in Backpropagation Learning with Conjugate gradients
+
+    θϵ_max = log(2, ϵ_max)
+    θη_max = log(2, η_max)
+
+    θn = [log(2,ϵ); log(2,η)]
+
+    if isnothing(D)
+
+        D = Gramian(data, kernel = Distance_kernel)
+
+        ∇Pn, Pn, Λ, β = Weights_and_Gradients(Y, D, ϵ, η)
+
+    else
+
+        ∇Pn, Pn, Λ, β = Weights_and_Gradients(Y, D, ϵ, η)
+    end
+
+    P = Pn
+
+    if isnothing(Smax)
+
+        Smax = length(θn)
+
+    end
+
+    εn = ε
+    λn = λ
+
+    gn = ∇Pn
+    sn = -gn # initial search direction. Starts in direction of steepest descent
+
+    success = true
+    S = 0
+
+    γn = 0
+    κn = 0
+    μn = 0
+    σn = 0
+
+    converged = false
+
+    for n in 1:nmax
+
+        # Step 1: calculate first and second order directional derivatives rdfd  qrefqfqwef
+        #=
+            Apart from the initial cycle, this step is only executed if the last cycle
+            succeeded in error reduction. Otherwise no change in the weight vector has been
+            made and this information is already known.
+        =#
+        if success
+
+            μn = transpose(sn)*gn # directional gradient
+
+            if μn >= 0
+
+                sn = -gn
+                μn = transpose(sn)*gn
+                S = 0
+
+            end
+
+            κn = norm(sn)
+            σn = εn/sqrt(κn) # renormalisation ensures uniform scaling for varying directions and gradients
+
+            θt = θn + σn*sn
+
+            if (θt[1] > θϵ_max || θt[2] > θη_max  || θt[2] < -15)
+
+                ϵt = ϵ
+                ηt = η # should not be 100
+
+            else
+
+                ϵt = 2^θt[1]
+                ηt = 2^θt[2]
+            end
+
+            ∇Pt, _, _, _ = Weights_and_Gradients(Y, D, ϵt, ηt)
+            γn = (transpose(sn)*(∇Pt - ∇Pn))/σn # directional curvature
+
+        end
+
+        # Step 2: increase the working curvature
+        δn = γn + λn*κn
+
+        # Step 3: make δn positive and increase λn
+        if δn <= 0
+            δn = λn*κn
+            λn = λn - γn/κn
+        end
+
+        # Step 4: calculate step size and adapt ε
+        αn = -μn/δn
+
+        εnx = εn*(αn/σn)^ps
+
+        # Step 5: calculate the comparison ratio
+        θnx = θn + αn*sn
+
+        if (θnx[1] > θϵ_max || θnx[2] > θη_max || θnx[2] < -15)
+
+            #= display(θnx[2])
+            display(θη_max)
+            display(θnx[1])
+            display(θϵ_max) =#
+
+            success = false
+
+            ρn = -2*Pn/(αn*μn)
+
+            ∇Pnx = -∇Pn
+            Pnx = 0.
+            Λnx = Λ
+            βnx = β
+
+            θn = [log(2,ϵ); log(2,η)]
+            θnx = θn
+
+        else
+
+            ϵnx = 2^θnx[1]
+            ηnx = 2^θnx[2]
+
+            ∇Pnx, Pnx, Λnx, βnx = Weights_and_Gradients(Y, D, ϵnx, ηnx)
+
+            ρn = 2*(Pnx - Pn)/(αn*μn)
+
+            success = (ρn >= 0)
+
+        end
+
+        # Step 6
+        if ρn < 0.25
+
+            λnx = minimum([λn + (δn*(1 - ρn)/κn); λmax])
+
+        elseif ρn > 0.75
+
+            λnx = maximum([λn/2; λmin])
+
+        else
+            λnx = λn
+        end
+
+        # Step 7: adjust the weights
+        if success
+
+            gnx = ∇Pnx
+
+            S += 1
+
+        else
+
+            θnx = θn
+            gnx = gn
+
+        end
+
+        # Step 8: choose new search direction
+        if S == Smax
+            # restart algoritm in direction of steepest descent
+
+            snx = -gnx
+            success = true
+            S = 0
+
+        else
+
+            if success # create new conjugate direction
+
+                Mn = (transpose(gn - gnx)*gnx)/μn #momentum term: Hestenes-Stiefel
+                snx = -gnx + Mn*sn
+
+                #= println("\nchange direction")
+                println("norm(gnx) = ", norm(gnx))
+                println("∇Pnx = ", ∇Pnx)
+                println("Pnx = ", round(Pnx, digits = 3))
+                println("ϵ = ", round((2^θnx[1])*1e6, digits = 3), "e-6")
+                println("η = ", round((2^θnx[2]), digits = 3)) =#
+
+            else # use current direction again
+
+                snx = sn
+
+            end
+
+        end
+
+        if norm(gnx) < τ
+
+            P = Pnx
+            ϵ = 2^θnx[1]
+            η = 2^θnx[2]
+            Λ = Λnx
+            β = βnx
+
+            converged = true
+
+            #= println("\nout")
+            println("norm(gnx) = ", norm(gnx))
+            println("P = ", round(P, digits = 3))
+            println("ϵ = ", round((2^θnx[1])*1e6, digits = 3), "e-6")
+            println("η = ", round((2^θnx[2]), digits = 3)) =#
+
+            break
+        else
+
+            sn = snx
+            ∇Pn = ∇Pnx
+            Pn = Pnx
+
+            εn = εnx
+            λn = λnx
+            θn = θnx
+            gn = gnx
+
+        end
+
+        if n == nmax
+            P = Pnx
+            ϵ = 2^θnx[1]
+            η = 2^θnx[2]
+            Λ = Λnx
+            β = βnx
+        end
+
+    end
+
+    # θnx[1] = log(2, ϵ)
+    # θnx[2] = log(2, η)= [ϵ, η]
+
+    return Λ, data, β, ϵ, η, P, converged
+end
+
+function Q_max(u, p)
+
+    N = size(p[2], 2)
+
+    Q = 0.
+
+    for n in 1:N
+
+        Q += ((p[2][:,n])*exp(-p[4]*sum(abs2, vcat(p[1], u[1]) - p[3][:,n])))[1]
+
+    end
+
+    return -Q
+end
+
+function Q_max2(u, p)
+
+    #Q_params = (Λ_Q, C_Q, η_Q, β_Q)
+
+    N = size(p[2], 2)
+
+    Q = 0.
+
+    for n in 1:N
+
+        Q += ((p[1][:,n])*exp(-p[3]*sum(abs2, u[1] .- p[2][:,n])))[1]
+
+    end
+
+    return -Q - p[4]
+end
+
+function logistic_sigmoid(y)
+
+    # logistic sigmoid link function
+
+    return 1 ./ (1 .+ exp.(-y))
+end
+
+function RVM(data, Y, η; σ2 = nothing, noise_itr = 0, max_itr = 1000, σ2_min = 0.005, σ2_dif = 0.001, re_est = 10e-6, alg = :regress)
+
+    function RVM_helper()
+
+        next_idx = 0
+        max_Δℒ = -Inf
+        next_update = 0
+        next_α = Inf
+
+        #= update key
+            0: do nothing
+            1: add
+            2: delete
+            3: re-estimate
+        =#
+
+        for m in 1:M
+
+            φm = G[:,m]
+
+            if Mt == 1 || noise
+
+                temp = transpose(φm)*B
+
+                S[m] = temp*φm - temp*G[:, ids]*Σ*transpose(G[:, ids])*transpose(temp)
+                Q[m] = temp*Ŷ - temp*G[:, ids]*Σ*transpose(G[:, ids])*B*Ŷ
+
+            else
+
+                if up == 1 # add
+
+                    temp = β*transpose(φm)*ei
+
+                    S[m] = S[m] - Σii*(temp)^2
+                    Q[m] = Q[m] - μi*temp
+
+                elseif up == 2 # delete
+
+                    temp = β*transpose(Φ*Σⱼ)*φm
+
+                    S[m] = S[m] + Σjj_inv*(temp)^2
+                    Q[m] = Q[m] + Σjj_inv*μⱼ*temp
+
+                elseif up == 3 # re-estimate
+
+                    temp = β*transpose(Φ*Σⱼ)*φm
+
+                    S[m] = S[m] + κⱼ*(temp)^2
+                    Q[m] = Q[m] + κⱼ*μⱼ*temp
+                end
+
+                if S[m] < 0
+
+                    temp = transpose(φm)*B
+
+                    S[m] = temp*φm - temp*G[:, ids]*Σ*transpose(G[:, ids])*transpose(temp)
+                end
+            end
+
+            Q2 = Q[m]^2
+
+            if isinf(α[m]) # base is not included
+
+                sm = S[m]
+                qm = Q[m]
+
+                θm = qm^2 - sm
+
+                if θm <= 0 # do nothing
+
+                    next_α_m = α[m]
+
+                    Δℒ = -Inf
+
+                    update_m = 0
+
+                else # adding the basis function
+
+                    next_α_m = sm^2/θm
+
+                    Δℒ = (Q2 - S[m])/S[m] + log(S[m]/Q2)
+
+                    update_m = 1
+                end
+
+            else # base is already included
+
+                temp = α[m]/(α[m] - S[m])
+
+                sm = temp*S[m]
+                qm = temp*Q[m]
+
+                θm = qm^2 - sm
+
+                if θm <= 0 # deleting the basis function
+
+                    next_α_m = Inf
+
+                    Δℒ = Q2/(S[m] - α[m]) - log(1 - S[m]/α[m])
+
+                    update_m = 2
+
+                else # re-estimating the basis function
+
+                    next_α_m = sm^2/θm
+
+                    if log(abs.(next_α_m - α[m])) > re_est
+
+                        temp = next_α_m*α[m]/(α[m] - next_α_m)
+
+                        Δℒ = Q2/(S[m] + temp) - log(1 + S[m]/temp)
+
+                        update_m = 3
+
+                    else
+
+                        next_α_m = α[m]
+
+                        Δℒ = -Inf
+
+                        update_m = 0
+                    end
+                end
+            end
+
+            if Δℒ > max_Δℒ
+
+                next_idx = m
+                max_Δℒ = Δℒ
+                next_update = update_m
+                next_α = next_α_m
+            end
+        end
+
+        return next_idx, next_update, next_α
+    end
+
+    if isa(data, Vector)
+        data = transpose(data)
+    end
+
+    if size(Y,1) == 1
+        Y = transpose(Y)
+    end
+
+    if isnothing(σ2) && alg == :regress
+        # Step 1: initialise σ² to some sensible value
+        σ2 = 0.1*var(Y)
+    elseif alg == :regress
+
+        β = 1/σ2
+    end
+
+    if alg != :regress && noise_itr != 0
+        noise_itr = 0
+    end
+
+    # calculate Gramian
+    G = Gramian(data, η)
+
+    N = size(G,1)
+
+    G = hcat(ones(N), G)
+
+    M = size(G,2)
+
+    # define weights and hyperparameters
+
+    α = Array{Float64, 1}(undef, M)
+    α = fill!(α, Inf)
+    μ = zeros(M)
+    Σ = Array{Float64, 2}(undef, 1, 1)
+    Φ = Array{Float64, 2}(undef, N, 1)
+
+    ids = Array{Int64,1}(undef, 1)
+    ids_vec = Array{Int64,1}(undef, M)
+    ids_vec = fill!(ids_vec, 0)
+
+    converged = false
+
+    S = Array{Float64, 1}(undef, M) # ∝ sparsity factor
+    Q = Array{Float64, 1}(undef, M) # ∝ quality factor
+
+    Σii = 0.
+    ei = Array{Float64, 1}(undef, 1)
+    μi = 0.
+    Σjj_inv = 1.
+    μⱼ = 0.
+    κⱼ = Array{Float64, 1}(undef, 1)
+    Σⱼ = Array{Float64, 1}(undef, 1)
+
+    up = 0
+    noise = false
+    iop = 1
+    noise_cnt = 1
+    Mt = 1
+
+    # Step 2: initialise with a single basis vector
+
+    norm2_φ = vec(sum(abs2, G, dims = 1))
+
+    #proj = sum(abs2, (transpose(G)*Y), dims = 2)
+
+    norm2_proj = sum(abs2, (transpose(G)*Y), dims = 2)./norm2_φ
+
+    np_max, idx = findmax(norm2_proj)
+
+    ids[1] = idx
+    ids_vec[idx] = 1
+
+    Φ[:,1] = G[:,idx]
+
+    if alg == :regress
+
+        α[idx] = norm2_φ[idx]/(np_max - σ2)
+
+        I_NN = Matrix{Float64}(I, N, N)
+        B = β*I_NN
+
+        Ŷ = Y
+
+        # Step 3: calculate variance and mean (weight)
+
+        Σ[1,1] = 1/(α[idx] + β*transpose(vec(Φ))*vec(Φ))
+        μ = β*Σ*transpose(Φ)*Y
+
+    else
+
+        # Step 3: calculate variance and mean (weight)
+
+        α[idx] = norm2_φ[idx]/(np_max - σ2)
+
+        Yapprox = logistic_sigmoid(G[:, ids]*μ)
+
+        β_vec = logistic_sigmoid(Yapprox)
+        β_vec = β_vec.*(1 .- β_vec)
+        B = Diagonal(β_vec)
+        Σ[1,1] = 1/(α[idx] + transpose(vec(Φ))*B*vec(Φ))
+
+        Ŷ = vec(Φ)*μ + Diagonal(1 ./ β_vec)*(Y .- Yapprox)
+
+        μ = Σ*transpose(vec(Φ))*B*Ŷ
+
+    end
+
+    next_idx, next_update, next_α = RVM_helper()
+
+    if next_idx != 0
+
+        while !converged
+
+            # Select a candidate basis vector from the set of all M
+
+            up = next_update
+
+            idx = next_idx # indicates the single basis function for which α[i] is to be updated
+
+            φi = G[:,idx]
+
+            if noise_cnt == noise_itr
+
+                γ = 1 .- α[ids].*diag(Σ)
+
+                σ2_new = sum(abs2, Y - G[:, ids]*μ)/(N - sum(γ))
+
+                σ2_new = maximum([σ2_new; σ2_min])
+
+                noise_cnt = 1
+
+                if abs(σ2_new - σ2) > σ2_dif
+                    # only update σ² if the error is greater than this value, faster algorithm
+                    # at the cost of accuracy
+
+                    σ2 = σ2_new
+
+                    β = 1/σ2
+
+                    B = β*I_NN
+
+                    noise = true
+
+                else
+
+                    noise = false
+                end
+
+            elseif noise_itr > 0
+
+                noise_cnt += 1
+                noise = false
+            end
+
+            if up == 1 # add
+
+                α[idx] = next_α
+
+                ids = vcat(ids, idx)
+                Mt += 1
+                ids_vec[idx] = Mt
+
+                if !noise
+
+                    temp = β*Σ*transpose(Φ)*φi
+
+                    ei = φi - Φ*temp
+                    Σii = 1/(α[idx] + S[idx])
+                    μi = Σii*Q[idx]
+
+                    μ = vcat(μ - μi*β*Σ*transpose(Φ)*φi, μi)
+
+                    Σ_newA = Σ + Σii*temp*transpose(temp)
+                    Σ_newB = -Σii*temp
+                    Σ = vcat(hcat(Σ_newA, Σ_newB), hcat(transpose(Σ_newB), Σii))
+                end
+
+                Φ = hcat(Φ, φi)
+
+            elseif up == 2 # delete
+
+                j = ids_vec[idx]
+
+                if j == 1
+                    ids_vec[ids] = ids_vec[ids] .- 1
+                else
+                    ids_vec[ids] = [ids_vec[ids][1:j-1]; ids_vec[ids][j:end] .- 1]
+                    ids_vec[idx] = 0
+                end
+
+                α[idx] = Inf
+                Mt -= 1
+
+                deleteat!(ids, j)
+
+                if !noise
+
+                    Σⱼ = copy(Σ[:, j])
+                    Σjj_inv = 1/Σ[j, j]
+                    μⱼ = copy(μ[j])
+
+                    temp = Σjj_inv*Σⱼ
+
+                    Σ = Σ - temp*transpose(Σⱼ)
+                    μ = μ - μⱼ*temp
+
+                    deleteat!(μ, j)
+
+                    Σ = Σ[1:end .!= j, 1:end .!= j]
+                end
+
+            elseif up == 3 # re-estimate
+
+                if !noise
+
+                    j = ids_vec[idx]
+                    Σⱼ = copy(Σ[:, j])
+
+                    κⱼ = 1/(Σ[j, j] + 1/(next_α - α[idx]))
+                    μⱼ = copy(μ[j])
+
+                    temp = κⱼ*Σⱼ
+
+                    Σ = Σ - temp*transpose(Σⱼ)
+                    μ = μ - μⱼ*temp
+                end
+
+                α[idx] = next_α
+            end
+
+            Σ = 0.5*(Σ + transpose(Σ))
+
+            if noise || !isposdef(Σ)
+
+                temp = β*transpose(G[:, ids])
+
+                # ---
+                # option 1
+
+                #Σ = inv(diagm(α[ids]) + β*transpose(G[:, ids])*G[:, ids])
+
+                # ---
+                # option 2 - ensures positive definite, results in increased sparsity
+
+                Σ = Matrix{Float64}(I, Mt, Mt)
+
+                Γ = diagm(α[ids]) + temp*G[:, ids]
+
+                Γ = 0.5*(Γ + transpose(Γ))
+
+                ldiv!(cholesky(Γ), Σ)
+
+                # ---
+
+                μ = Σ*temp*Y
+
+            end
+
+            next_idx, next_update, next_α = RVM_helper()
+
+            if up == 2
+
+                Φ = G[:, ids]
+            end
+
+            iop += 1
+
+            converged = (next_update == 0) || up == 0 || iop == max_itr
+        end
+
+        if noise_itr > 0
+
+            if noise_cnt != 1
+
+                γ = 1 .- α[ids].*diag(Σ)
+
+                σ2_new = sum(abs2, Y - G[:, ids]*μ)/(N - sum(γ))
+
+                σ2_new = maximum([σ2_new; σ2_min])
+            end
+
+            σ2 = σ2_new
+        end
+    end
+
+    #y = G[:, ids]*μ
+
+    if ids_vec[1] != 0
+
+        j = ids_vec[1]
+
+        μ0 = μ[j]
+
+        ids = deleteat!(ids, j) .- 1
+
+        return (transpose(deleteat!(μ, j))), data[:,ids], μ0, σ2
+
+    else
+
+        return (transpose(μ)), data[:,ids .- 1], 0, σ2
+    end
+end
+
+function KMD(coords, Gs, index_map; num_basis = nothing, tr = 1-1e-8, residual = false, ε = 1e-8, alg = :KEDMD)
+
+    A = transpose(Gs[1:end-1, 2:end]) # Gyx
+    G = Gs[1:end-1, 1:end-1] # Gxx
+
+    N = size(G,1)
+
+    if !isnothing(num_basis)
+
+        num_basis = clamp(num_basis, 1, size(G,1))
+
+        if num_basis == size(G,1)
+            num_basis = nothing
+        end
+    end
+
+    if alg == :RKHS
+
+        invG = Matrix{Float64}(I, N, N)
+        ldiv!(cholesky(G + N*ε*I), invG)
+        #invG = inv(G + N*ε*I)
+
+        U = invG*A
+
+        if !isnothing(num_basis)
+
+            decomp, history  = partialschur(U, nev = num_basis,
+            tol = 1e-6, restarts = 200, which = LM())
+            eigval, V = partialeigen(decomp)
+
+            num_basis = length(eigval)
+
+            eigval = eigval[end:-1:1]
+            V = V[:, end:-1:1]
+
+        else
+
+            tr = clamp(tr, 0.0, 1.0)
+
+            eigval, V = eigen(U)
+
+            eigval = eigval[end:-1:1]
+            V = V[:, end:-1:1]
+
+            # Find r to capture % of the energy
+            cdλ = abs.(cumsum(eigval.^2)./sum(eigval.^2))
+
+            num_basis = findfirst(cdλ .>= tr) # truncation rank
+
+            eigval = eigval[1:num_basis]
+            V = V[:,1:num_basis]
+
+        end
+
+        eigval = eigval./eigval[1]
+        V = V * Diagonal(eigval)
+
+        if maximum(abs.(eigval)) > 1
+
+            # ... but there may be numerical innacuracies, or irrelevant
+            # component in the eigenbasis decomposition (the smaller eigenvalues
+            # there have no significance, according to the MMD test, and we use
+            # implicitly an inverse here).
+            # This should not happen, but if it does, clip eigvals
+
+            for i in 1:num_basis
+
+                if abs(eigval[i]) > 1
+
+                    eigval[i] /= abs(eigval[i])
+                end
+            end
+
+            V = V * Diagonal(eigval)
+        end
+
+        φ = G*V
+        Ξ = φ\transpose(coords[:, index_map[1:end-1]])
+        #Ξ = (transpose(φ)*φ + 1e-9*I)\(transpose(φ)*transpose(coords[:, index_map[1:end-1]]))
+
+        W = transpose(V)
+        Phi = transpose(Ξ)
+
+        DMD = (Phi, eigval, W)
+
+        if residual
+
+            Ξ = transpose(Phi)
+
+            residual = norm(transpose(coords[:, index_map[2:end]]) - real.(φ*Diagonal(eigval)*Ξ))
+
+            return DMD, residual, φ
+
+        else
+
+            return DMD
+        end
+
+    else alg == :KEDMD
+
+        if !isnothing(num_basis)
+
+            decomp, history  = partialschur(G, nev = num_basis, tol = 1e-6, restarts = 200, which = LM())
+            Σ², Q = partialeigen(decomp)
+
+            num_basis = length(Σ²)
+
+            #Σ² = abs.(Σ²[end:-1:1])
+            Σ² = Σ²[end:-1:1]
+            Q = Q[:, end:-1:1]
+
+            Σ = sqrt.(Σ²)
+
+        else
+
+            tr = clamp(tr, 0.0, 1.0)
+
+            Σ², Q = eigen(G) # G = Q*diagm(Σ²)*transpose(Q)
+
+            #Σ² = abs.(Σ²[end:-1:1])
+            Σ² = Σ²[end:-1:1]
+            Q = Q[:, end:-1:1]
+
+            # Find r to capture % of the energy
+            cdΣ = cumsum(Σ².^2)./sum(Σ².^2)
+            num_basis = findfirst(cdΣ .>= tr) # truncation rank
+
+            Σ = sqrt.(Σ²[1:num_basis])
+            Q = Q[:,1:num_basis]
+
+        end
+
+        Σ = Diagonal(Σ)
+        Σ_inv = inv(Σ)
+        U = Σ_inv*transpose(Q)*A*Q*Σ_inv
+
+        eigval, V = eigen(U) # U is not the Koopman matrix, it's a projection
+
+        eigval = eigval[end:-1:1]
+        V = V[:, end:-1:1]
+
+        eigval = eigval./eigval[1]
+        V = V * Diagonal(eigval)
+
+        if maximum(abs.(eigval)) > 1
+
+            # ... but there may be numerical innacuracies, or irrelevant
+            # component in the eigenbasis decomposition (the smaller eigenvalues
+            # there have no significance, according to the MMD test, and we use
+            # implicitly an inverse here).
+            # This should not happen, but if it does, clip eigvals
+
+            for i in 1:num_basis
+
+                if abs(eigval[i]) > 1
+
+                    eigval[i] /= abs(eigval[i])
+                end
+            end
+
+            V = V * Diagonal(eigval)
+        end
+
+        Vinv = V \ Matrix{Float64}(I, num_basis, num_basis)
+        Phi = coords[:, index_map[1:end-1]]*Q*Σ_inv*transpose(Vinv) # koopman modes
+
+        W = transpose(V)*Σ_inv*transpose(Q)
+
+        DMD = (Phi, eigval, W)
+
+        if residual
+
+            φ = Q*Σ*V
+            Ξ = Vinv*Σ_inv*transpose(coords[:, index_map[1:end-1]]*Q)
+
+            residual = norm(transpose(coords[:, index_map[2:end]]) - real.(φ*Diagonal(eigval)*Ξ))
+
+            return DMD, residual, φ
+
+        else
+
+            return DMD
+        end
+    end
+end
+
+function GP(data, Y, η; ϵ = 1e-6, alg = :classify, max_itr = 10, tol = 1e-9)
+
+    #https://nbviewer.org/github/krasserm/bayesian-machine-learning/blob/dev/gaussian-processes/gaussian_processes_classification.ipynb
+
+    if size(Y,2) != 1
+        Y = transpose(Y)
+    end
+
+    G = Gramian(data, η)
+
+    G = G + ϵ*I
+
+    N = size(G, 1)
+
+    a = zeros(N)
+
+    σ = Array{Float64, 1}(undef, N)
+    W = Array{Float64, 2}(undef, N, N)
+
+    converged = false
+
+    for i in 1:max_itr
+
+        σ = logistic_sigmoid(a)
+        W = Diagonal(σ .* (1 .- σ))
+
+        Qinv = (W*G + I) \ I
+
+        a_new = G*Qinv*(Y .- σ .+ W*a)
+
+        if norm(a_new .- a) < tol
+
+            a = a_new
+            converged = true
+            break
+        end
+
+        a = a_new
+
+    end
+
+    μ_weights = Y .- σ
+
+    σ²_weights = Matrix{Float64}(I, N, N)
+    ldiv!(cholesky(inv(W) + G), σ²_weights)
+
+    C = copy(data)
+
+    return μ_weights, σ²_weights, C, converged
+end
+
+function GP_predict(x, μ_weights, σ²_weights, C, η, kernel = Gaussian_kernel)
+
+    N = size(C, 2)
+    ϑ = Array{Float64,1}(undef, N) # feature vector
+
+    for n in 1:N
+
+        ϑ[n] = kernel(C[:,n], x, η)
+    end
+
+    μ_a = transpose(ϑ)*μ_weights;
+    σ²_a = 1 - transpose(ϑ)*σ²_weights*ϑ
+    p = logistic_sigmoid(μ_a*1/(sqrt(1 + π*σ²_a/8)))
+
+    return p
+end
+
+function Mean_Distance(X; KNN = false, tree = nothing, K = nothing)
+
+    # if KNN is false then it is the average between all points - very slow
+
+    Mx = size(X, 2) # sample size
+
+    average_distance = 0.0
+
+    if KNN == true
+
+        if isnothing(tree)
+            tree = BallTree(X)
+        end
+        if isnothing(K)
+            K = convert(Int, round(N/4)) # K is 1/4 of the sample size
+        end
+
+        for i in 1:Mx
+
+            _, dists = knn(tree, X[:,i], K)
+
+            average_distance += sum(dists)/K
+        end
+
+        return average_distance/Mx, tree
+
+    else
+
+        for i in 1:Mx
+
+            distance = 0
+
+            for j in 1:Mx
+
+                if i != j
+                    distance += norm(X[:, i] .- X[:, j])
+                end
+            end
+
+            average_distance += distance/Mx
+        end
+
+        return average_distance/Mx
+    end
+end
+
+function ichol(G, γ; alg = :pgso, Mmax = size(G, 1))
+
+    N = size(G, 1)
+
+    Mmax = clamp(Mmax, 1, N)
+
+    nG = norm(G)
+    η = γ*nG # precision parameter
+
+    if alg == :pgso
+
+        #=
+        hardoon
+        R is an unsorted upper triangular matrix
+        more precisely this is the partial Gram-Schmidt orthogonalisation
+        faster algo
+        =#
+
+        # initialisation
+
+        ids = Array{Int64,1}(undef, N)
+        scale = Array{Float64,1}(undef, N)
+
+        j = 1
+        R = zeros(N, N) # feat
+        norm2 = diag(G) #  norm2
+
+        norm2_nxt, ids_nxt = findmax(norm2)
+
+        sum_norm2 = sum(norm2)
+
+        while sum_norm2 > (η) && j != Mmax + 1
+
+            ids[j] = ids_nxt
+            scale[j] = sqrt(norm2_nxt)
+
+            norm2_nxt = 0.
+            ids_nxt = 0
+
+            for i in 1:N
+
+                R[i, j] = (G[i, ids[j]] - transpose(R[i,1:j-1])*R[ids[j],1:j-1])/scale[j]
+
+                R2 = R[i, j]^2
+                norm2[i] = norm2[i] - R2
+
+                sum_norm2 -= R2
+
+                if norm2[i] > norm2_nxt
+                    norm2_nxt = norm2[i]
+                    ids_nxt = i
+                end
+            end
+
+            j += 1
+        end
+
+        M = j - 1
+
+        R = R[:, 1:M]
+        ids = ids[1:M]
+        scale = scale[1:M]
+        error = norm(G - R*transpose(R))/nG
+
+        # norm(G - R*transpose(R))/nG <= γ; error <= γ
+
+        PGSO = (R, ids, scale, error)
+
+        return PGSO
+
+    elseif alg == :ichol
+
+        # includes symmetric permutations of rows and columns to ensure rank is minimal.
+
+        # Hardoon - CCA
+        # if !isposdef(G) then error may occur
+
+        # initialisation
+        i = 1
+
+        N = size(G, 1)
+        P = Matrix{Float64}(I, N, N)
+        R = diagm(diag(G)) # sorted lower triangular matrix
+        K = copy(G)
+
+        PerI = Matrix{Float64}(I, N, N)
+
+        retcode = true
+
+        while η < sum(diag(R)) && i != Mmax + 1 && retcode
+
+            # find best new element's index
+            j = argmax(diag(R)[i:N])
+
+            # recover index relative to R
+            j = (j + i) - 1
+
+            # update permutation matrix P
+            Pnext = copy(PerI)
+            Pnext[i,i] = 0
+            Pnext[j,j] = 0
+            Pnext[i,j] = 1
+            Pnext[j,i] = 1
+            P = P*Pnext
+
+            # permute elements in i and j in k
+            K = Pnext*K*Pnext
+
+            # update (due to new permutation) the already calculated elements
+            Ri = R[i,1:i-1]
+
+            R[i,1:i-1] = R[j,1:i-1]
+            R[j,1:i-1] = Ri
+
+            # Permute elements j,j and i,i of r
+            Rjj = R[j,j]
+
+            R[j,j] = R[i,i]
+            R[i,i] = Rjj
+
+            # Set
+            R[i,i] = sqrt(R[i,i])
+
+            # Calculate i-th column of r
+            Rsum = K[i+1:N,i]
+            for k in 1:i-1
+                Rsum .-= (R[i+1:N,k]*R[i,k])
+            end
+
+            R[i+1:N, i] = (1/R[i,i])*Rsum
+
+            # update only diagonal elements
+            for k in i+1:N
+
+                R[k,k] = K[k,k] - sum(R[k,1:i].^2)
+
+                if R[k,k] < 0
+                    # matrix is not positive definite.
+                    retcode = false
+                end
+            end
+
+            i = i + 1
+        end
+
+        M = i-1
+        R = R[:,1:M]
+
+        error = norm(transpose(P)*G*P - R*transpose(R))/nG # reconstruction error
+        # error <= γ
+
+        Ids = [findfirst(col .== 1) for col in eachcol(P)]
+
+        #G[Ids, Ids] ≈ transpose(P)*G*P ≈ R*transpose(R)
+
+        ichol = (R, Ids, P, error, retcode)
+
+        return ichol
     end
 end

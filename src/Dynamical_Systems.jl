@@ -103,10 +103,64 @@ end
 
 function σ_Van_der_Pol!(du, u, p, t)
 
-    du[1] = 0.0001
-    du[2] = 0.0001
+    du[1] = 0.001
+    du[2] = 0.001
 
     return du
+end
+
+function Delayed_Van_der_Pol!(du, u, h, p, t)
+
+    x, y = u
+    μ, v0, v1, beta0, beta1, tau = p
+
+    hist = h(p, t - tau)[2]
+
+    du[1] = (v0 / (1 + beta0 * (hist^2))) * y
+    du[2] = (v1 / (1 + beta1 * (hist^2))) * μ*(1 - x^2)*y - x
+end
+
+function Ornstein_Uhlenbeck!(du, u, p, t)
+
+    α = p[1]
+    D = p[2]
+
+    du[1] = -α*D*u[1]
+
+    return du
+end
+
+function σ_Ornstein_Uhlenbeck!(du, u, p, t)
+
+    D = p[2]
+
+    du[1] = sqrt(2*D)
+
+    return du
+end
+
+function double_gyre(du, u, p, t)
+
+    x, y = u
+    A = p[1]
+
+    du[1] = -π*A*sin(π*x)*cos(π*y)
+    du[2] = π*A*cos(π*x)*sin(π*y)
+
+    return du
+
+end
+
+function σ_double_gyre(du, u, p, t)
+
+    x, y = u
+    ε = p[2]
+
+    du[1] = ε*sqrt(x/4 + 1)
+    du[2] = ε
+
+    return du
+
 end
 
 #_______________________________________________________________________________
@@ -136,6 +190,12 @@ function pendulum(x, a; max_speed = 8, max_torque = 2.0, g = 9.81, m = 1.0, l = 
     ω_next = ω + ((3 * g / (2 * l)) * sin(θ) + (3.0 / (m * l^2) * a[1])) * dt
     ω_next = clamp(ω_next, -max_speed, max_speed)
     θ_next = θ + ω_next * dt
+
+    if θ_next > π
+        θ_next = θ_next - 2π
+    elseif θ_next < -π
+        θ_next = θ_next + 2π
+    end
 
     return [θ_next, ω_next]
 end

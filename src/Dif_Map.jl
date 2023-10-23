@@ -113,9 +113,9 @@ function spectral_basis(Gs; num_basis = nothing, scaled = true, α = 1.0, return
     tol = 1e-6, restarts = 200, which = LM())
     eigval, eigvec = partialeigen(decomp)
 
-    order = sortperm(real.(eigval), rev = true)
-    eigval = real.(eigval[order])
-    eigvec = real.(eigvec[:, order])
+    #order = sortperm(real.(eigval), rev = true)
+    eigval = real.(eigval[end:-1:1])
+    eigvec = real.(eigvec[:, end:-1:1])
 
     if eigen_cutoff >= 0
 

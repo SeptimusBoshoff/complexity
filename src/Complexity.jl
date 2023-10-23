@@ -1,16 +1,20 @@
 module Complexity
 
 using ArnoldiMethod
-import Ipopt
-using JuMP
+#import Ipopt
+#using JuMP
 using LinearAlgebra
 using Logging
-using NearestNeighbors
-using NonNegLeastSquares
+using NearestNeighbors #
+using NonNegLeastSquares #
 using Revise
 using Test
-using TSVD
+#using TSVD #
 using SpecialFunctions
+using Optimization
+using OptimizationOptimJL
+using ForwardDiff
+using Distributions
 
 include("./Kernel_Machine.jl")
 include("./Machine_Dynamics.jl")
